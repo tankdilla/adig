@@ -1,0 +1,25 @@
+sources:
+  - name: google_trends_daily
+    type: rss
+    url: "https://trends.google.com/trends/trendingsearches/daily/rss?geo=US"
+
+  - name: youtube_search_wellness
+    type: html
+    urls:
+      - "https://www.youtube.com/results?search_query=herbal+tea+benefits"
+      - "https://www.youtube.com/results?search_query=pcos+diet+tips"
+      - "https://www.youtube.com/results?search_query=prediabetes+meal+prep"
+      - "https://www.youtube.com/results?search_query=plant+based+breakfast+ideas"
+
+  - name: reddit_pcos
+    type: html
+    urls:
+      - "https://www.reddit.com/r/PCOS/top/?t=day"
+      - "https://www.reddit.com/r/prediabetes/top/?t=day"
+      - "https://www.reddit.com/r/diabetes/top/?t=day"
+      - "https://www.reddit.com/r/PlantBasedDiet/top/?t=day"
+
+rules:
+  max_pages_total: 10
+  polite_delay_ms: [400, 1200]
+  user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome Safari"

@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Engagement — H2N</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; max-width: 920px; margin: 0 auto; }
+    .top { display:flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; margin: 12px 0; }
+    .muted { color: #666; font-size: 14px; white-space: pre-wrap; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; white-space: pre-wrap; }
+    button { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; background: white; }
+    input { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; }
+    .row { display:flex; gap: 10px; flex-wrap: wrap; align-items:center; }
+    .pill { display:inline-block; padding:6px 10px; border-radius: 999px; background:#f2f2f2; }
+    .actions { display:flex; gap: 10px; flex-wrap: wrap; }
+    a { word-break: break-word; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <div>
+      <h2>Engagement Queue Approvals</h2>
+      <div class="muted">Signed in as <b>{{ user }}</b></div>
+    </div>
+    <div class="row">
+      <a href="/admin"><button type="button">Home</button></a>
+      <a href="/admin/engagement?status=pending"><button type="button">Pending</button></a>
+      <a href="/admin/engagement?status=approved"><button type="button">Approved</button></a>
+      <a href="/admin/engagement?status=rejected"><button type="button">Rejected</button></a>
+    </div>
+  </div>
+
+  <p class="pill">Showing: {{ status }}</p>
+
+  {% if not items %}
+    <div class="card">
+      <b>No items.</b>
+      <div class="muted">When the engagement agent runs, suggested actions show up here.</div:>
+    </div>
+  {% endif %}
+
+  {% for i in items %}
+    <div class="card">
+      <div class="row">
+        <span class="pill">Like: {{ "yes" if i.action_like else "no" }}</span>
+        <span class="pill">Comment: {{ "yes" if i.action_comment else "no" }}</span>
+        {% if i.target_handle %}<span class="pill">@{{ i.target_handle }}</span>{% endif %}
+        <span class="muted">Created: {{ i.created_at }}</span>
+      </div>
+
+      <div class="muted"><b>Target</b></div>
+      <div class="mono"><a href="{{ i.target_url }}" target="_blank">{{ i.target_url }}</a></div>
+
+      {% if i.suggested_comment %}
+        <div class="muted" style="margin-top:10px;"><b>Suggested comment</b></div>
+        <div class="mono">{{ i.suggested_comment }}</div>
+      {% endif %}
+
+      {% if status == "pending" %}
+        <hr/>
+        <div class="actions">
+          <form method="post" action="/engagement/{{ i.id }}/approve">
+            <input type="hidden" name="approved" value="true" />
+            <input type="hidden" name="by" value="{{ user }}" />
+            <button type="submit">Approve ✅</button>
+          </form>
+
+          <form method="post" action="/engagement/{{ i.id }}/approve">
+            <input type="hidden" name="approved" value="false" />
+            <input type="hidden" name="by" value="{{ user }}" />
+            <button type="submit" style="border-color:#c00;">Reject ❌</button>
+          </form>
+        </div>
+      {% else %}
+        <div class="muted" style="margin-top:10px;">
+          Status: <b>{{ i.status.value }}</b>
+          {% if i.approved_by %} — by {{ i.approved_by }}{% endif %}
+        </div>
+      {% endif %}
+    </div>
+  {% endfor %}
+</body>
+</html>

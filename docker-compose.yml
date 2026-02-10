@@ -1,0 +1,111 @@
+services:
+  db:
+    image: postgres:16
+    container_name: h2n_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-h2n}
+      POSTGRES_USER: ${POSTGRES_USER:-h2n}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-h2n_password}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: h2n_redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  # Local LLM service
+  ollama:
+    image: ollama/ollama:latest
+    container_name: h2n_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./services/api
+    container_name: h2n_api
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-h2n}:${POSTGRES_PASSWORD:-h2n_password}@db:5432/${POSTGRES_DB:-h2n}
+      REDIS_URL: redis://redis:6379/0
+      CONTENT_INTEL_TASK: tasks.content_intel_daily
+      LLM_PROVIDER: ollama
+      OLLAMA_BASE_URL: http://ollama:11434
+      PYTHONPATH: /app:/shared
+    depends_on:
+      - db
+      - redis
+      - ollama
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./services/api:/app
+      - ./shared:/app/shared
+      
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./services/worker
+    container_name: h2n_worker
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-h2n}:${POSTGRES_PASSWORD:-h2n_password}@db:5432/${POSTGRES_DB:-h2n}
+      REDIS_URL: redis://redis:6379/0
+      LLM_PROVIDER: ollama
+      OLLAMA_BASE_URL: http://ollama:11434
+      PYTHONPATH: /app
+    depends_on:
+      - db
+      - redis
+      - ollama
+    volumes:
+      - ./services/worker/app:/app
+      - ./shared:/app/shared
+      - agent_logs:/logs
+    restart: unless-stopped
+
+  scheduler:
+    build:
+      context: ./services/scheduler
+    container_name: h2n_scheduler
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - redis
+    volumes:
+      - ./services/scheduler/app:/app
+    restart: unless-stopped
+
+  ollama_init:
+    image: ollama/ollama:latest
+    depends_on:
+      - ollama
+    entrypoint: ["/bin/sh","-lc"]
+    command: ["sleep 3 && ollama pull ${OLLAMA_MODEL:-llama3.1:8b}"]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    restart: "no"
+
+  playwright:
+    image: mcr.microsoft.com/playwright/python:v1.42.0-jammy
+    container_name: h2n_playwright
+    command: sleep infinity
+    shm_size: "1gb"
+    restart: unless-stopped
+
+
+volumes:
+  pgdata:
+  agent_logs:
+  ollama_data:

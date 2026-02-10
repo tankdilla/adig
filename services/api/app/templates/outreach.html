@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Outreach — H2N</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; max-width: 920px; margin: 0 auto; }
+    .top { display:flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; margin: 12px 0; }
+    .muted { color: #666; font-size: 14px; white-space: pre-wrap; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; white-space: pre-wrap; }
+    button { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; background: white; }
+    .row { display:flex; gap: 10px; flex-wrap: wrap; align-items:center; }
+    .pill { display:inline-block; padding:6px 10px; border-radius: 999px; background:#f2f2f2; }
+    .actions { display:flex; gap: 10px; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <div>
+      <h2>Outreach Draft Approvals</h2>
+      <div class="muted">Signed in as <b>{{ user }}</b></div>
+    </div>
+    <div class="row">
+      <a href="/admin"><button type="button">Home</button></a>
+      <a href="/admin/outreach?status=pending"><button type="button">Pending</button></a>
+      <a href="/admin/outreach?status=approved"><button type="button">Approved</button></a>
+      <a href="/admin/outreach?status=rejected"><button type="button">Rejected</button></a>
+    </div>
+  </div>
+
+  <p class="pill">Showing: {{ status }}</p>
+
+  {% if not items %}
+    <div class="card">
+      <b>No items.</b>
+      <div class="muted">When the influencer agent runs, outreach drafts show up here.</div:>
+    </div>
+  {% endif %}
+
+  {% for o in items %}
+    <div class="card">
+      <div class="row">
+        {% if o.creator and o.creator.handle %}
+          <span class="pill">@{{ o.creator.handle }}</span>
+        {% endif %}
+        {% if o.offer_type %}<span class="pill">{{ o.offer_type }}</span>{% endif %}
+        {% if o.campaign_name %}<span class="pill">{{ o.campaign_name }}</span>{% endif %}
+        <span class="muted">Created: {{ o.created_at }}</span>
+      </div>
+
+      <div class="muted"><b>Message</b></div>
+      <div class="mono">{{ o.message }}</div>
+
+      {% if status == "pending" %}
+        <hr/>
+        <div class="actions">
+          <form method="post" action="/outreach/{{ o.id }}/approve">
+            <input type="hidden" name="approved" value="true" />
+            <input type="hidden" name="by" value="{{ user }}" />
+            <button type="submit">Approve ✅</button>
+          </form>
+
+          <form method="post" action="/outreach/{{ o.id }}/approve">
+            <input type="hidden" name="approved" value="false" />
+            <input type="hidden" name="by" value="{{ user }}" />
+            <button type="submit" style="border-color:#c00;">Reject ❌</button>
+          </form>
+        </div>
+      {% else %}
+        <div class="muted" style="margin-top:10px;">
+          Status: <b>{{ o.status.value }}</b>
+          {% if o.approved_by %} — by {{ o.approved_by }}{% endif %}
+        </div>
+      {% endif %}
+    </div>
+  {% endfor %}
+</body>
+</html>

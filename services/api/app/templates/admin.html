@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>H2N Control Plane</title>
+    <p class="muted">Signed in as <b>{{ user }}</b></p>
+
+    <form method="post" action="/logout">
+    <button type="submit">Logout</button>
+    </form>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; max-width: 820px; margin: 0 auto; }
+    .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; margin: 12px 0; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .pill { display:inline-block; padding:6px 10px; border-radius: 999px; background:#f2f2f2; }
+    button { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; background: white; }
+    input, select { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; width: 100%; }
+    .muted { color: #666; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h2>H2N Agent Control Plane</h2>
+  <p class="muted">Counts reflect <b>pending approvals</b>.</p>
+
+  <div class="card">
+    <div class="row">
+      <span class="pill">Posts: {{ pending_posts }}</span>
+      <span class="pill">Engagement: {{ pending_eng }}</span>
+      <span class="pill">Outreach: {{ pending_out }}</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Content Intel</h3>
+
+    {% if request.query_params.get('msg') %}
+        <p class="muted"><b>{{ request.query_params.get('msg') }}</b></p>
+    {% endif %}
+
+    <form method="post" action="/admin/generate-today">
+        <button type="submit">Generate today’s ideas</button>
+    </form>
+
+    <p class="muted" style="margin-top:10px;">
+        After it runs, check <b>Review Posts</b> for new Reel drafts and <b>/plan/today</b> for the daily summary.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Safety</h3>
+    <p class="muted">Default should stay safe: Kill switch ON + Action mode REVIEW.</p>
+
+    <form method="post" action="/settings/kill-switch">
+      <label>Kill switch (ON = nothing executes)</label><br/>
+      <select name="enabled">
+        <option value="true" {% if settings.get("KILL_SWITCH","true") == "true" %}selected{% endif %}>ON</option>
+        <option value="false" {% if settings.get("KILL_SWITCH","true") == "false" %}selected{% endif %}>OFF</option>
+      </select>
+      <button type="submit">Update Kill Switch</button>
+    </form>
+
+    <br/>
+
+    <form method="post" action="/settings/action-mode">
+      <label>Action Mode</label><br/>
+      <select name="mode">
+        <option value="review" {% if settings.get("ACTION_MODE","review") == "review" %}selected{% endif %}>review</option>
+        <option value="manual" {% if settings.get("ACTION_MODE","review") == "manual" %}selected{% endif %}>manual</option>
+        <option value="live" {% if settings.get("ACTION_MODE","review") == "live" %}selected{% endif %}>live</option>
+      </select>
+      <button type="submit">Update Action Mode</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>Quick Links (API)</h3>
+    <ul>
+      <li><a href="/plan/today">/plan/today</a></li>
+      <li><a href="/posts/drafts">/posts/drafts</a></li>
+      <li><a href="/engagement/queue">/engagement/queue</a></li>
+      <li><a href="/outreach/queue">/outreach/queue</a></li>
+      <li><a href="/settings">/settings</a></li>
+    </ul>
+    <p class="muted">Remember: you must send <b>x-admin-token</b> header for these calls.</p>
+  </div>
+  
+  <div class="card">
+    <h3>Approvals</h3>
+    <div class="row">
+        <a href="/admin/posts"><button type="button">Review Posts</button></a>
+        <a href="/admin/engagement"><button type="button">Review Engagement</button></a>
+        <a href="/admin/outreach"><button type="button">Review Outreach</button></a>
+    </div>
+  </div>
+
+</body>
+</html>
