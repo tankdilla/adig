@@ -1,10 +1,11 @@
 import enum
 from datetime import datetime
 from sqlalchemy import (
-    String, Text, DateTime, Integer, Boolean, Enum, ForeignKey, UniqueConstraint
+    Column, String, Text, DateTime, Integer, Boolean, Enum, ForeignKey, UniqueConstraint
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship, DeclarativeBase
-# from .db import Base
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.sql import func
 
 class Base(DeclarativeBase):
     pass
@@ -29,6 +30,23 @@ class QueueType(str, enum.Enum):
     engagement = "engagement"
     outreach = "outreach"
     posting = "posting"
+
+class AppLog(Base):
+    __tablename__ = "app_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    level = Column(String(16), nullable=False, index=True)
+    logger = Column(String(128), nullable=True, index=True)
+    service = Column(String(32), nullable=True, index=True)   # api / worker / scraper
+    message = Column(Text, nullable=True)
+
+    request_id = Column(String(64), nullable=True, index=True)
+    task_id = Column(String(64), nullable=True, index=True)
+
+    event = Column(String(128), nullable=True, index=True)
+    data = Column(JSONB, nullable=True)
 
 class Setting(Base):
     __tablename__ = "settings"

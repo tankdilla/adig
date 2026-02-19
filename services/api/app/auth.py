@@ -3,7 +3,7 @@ from typing import Optional
 
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
-from .settings import settings
+from settings import settings
 
 # Cookie name + secret
 COOKIE_NAME = getattr(settings, "session_cookie_name", "h2n_admin")

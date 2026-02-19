@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Logs</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; padding: 16px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border-bottom: 1px solid #eee; padding: 8px; vertical-align: top; }
+    th { text-align: left; font-size: 12px; color: #555; }
+    .meta { display:flex; gap: 12px; align-items:center; margin: 8px 0 16px; flex-wrap: wrap; }
+    input, select { padding: 6px; }
+    .msg { max-width: 900px; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    a { color: #0b57d0; text-decoration: none; }
+    .pager { display:flex; gap:12px; margin-top: 14px; }
+  </style>
+</head>
+<body>
+  <div class="meta">
+    <a href="/admin">← Admin</a>
+    <strong>Logs</strong>
+    <span style="opacity:.7">as {{ user }}</span>
+  </div>
+
+  <form method="get" class="meta">
+    <input name="q" placeholder="Search…" value="{{ q or '' }}">
+    <select name="service">
+      <option value="">all services</option>
+      <option value="api" {% if service=='api' %}selected{% endif %}>api</option>
+      <option value="worker" {% if service=='worker' %}selected{% endif %}>worker</option>
+      <option value="scraper" {% if service=='scraper' %}selected{% endif %}>scraper</option>
+    </select>
+    <select name="level">
+      <option value="">all levels</option>
+      <option value="INFO" {% if level=='INFO' %}selected{% endif %}>INFO</option>
+      <option value="WARNING" {% if level=='WARNING' %}selected{% endif %}>WARNING</option>
+      <option value="ERROR" {% if level=='ERROR' %}selected{% endif %}>ERROR</option>
+    </select>
+    <button type="submit">Filter</button>
+  </form>
+
+  <table>
+    <tr>
+      <th>Time</th>
+      <th>Svc</th>
+      <th>Lvl</th>
+      <th>Message (JSON)</th>
+    </tr>
+    {% for row in logs %}
+    <tr>
+      <td style="white-space:nowrap;">{{ row.created_at }}</td>
+      <td>{{ row.service }}</td>
+      <td>{{ row.level }}</td>
+      <td class="msg">{{ row.message }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <div class="pager">
+    {% if has_prev %}
+      <a href="?page={{ page-1 }}{% if q %}&q={{ q }}{% endif %}{% if service %}&service={{ service }}{% endif %}{% if level %}&level={{ level }}{% endif %}">← Prev</a>
+    {% endif %}
+    <span>Page {{ page }}</span>
+    {% if has_next %}
+      <a href="?page={{ page+1 }}{% if q %}&q={{ q }}{% endif %}{% if service %}&service={{ service }}{% endif %}{% if level %}&level={{ level }}{% endif %}">Next →</a>
+    {% endif %}
+  </div>
+</body>
+</html>

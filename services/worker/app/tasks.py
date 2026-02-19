@@ -6,10 +6,19 @@ from agents.content_intel.pipeline import run_content_intel
 # from agents.creator_discovery import run_creator_discovery
 # from agents.engagement_queue import build_engagement_queue
 from agents.scrape import fetch_page_text
+import structlog
+from structlog.contextvars import bind_contextvars, clear_contextvars
+
+log = structlog.get_logger(__name__)
 
 @celery.task(name="tasks.content_intel_daily")
 def content_intel_daily():
-    return run_content_intel()
+    clear_contextvars()
+    bind_contextvars(task_id=content_intel_daily.request.id)
+    log.info("task_started", event="content_intel_daily")
+    result = run_content_intel()
+    log.info("task_finished", event="content_intel_daily", result=result)
+    return result
 
 # @celery.task(name="tasks.creator_discovery_weekly")
 # def creator_discovery_weekly():

@@ -1,4 +1,6 @@
 import os
+import logging
+import structlog
 from celery import Celery
 from fastapi import FastAPI, Depends, Header, HTTPException, Request, Form, status
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
@@ -6,12 +8,12 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from datetime import datetime, date
 
-from .db import Base, engine, get_db
-from .settings import settings
-# from . import models
-from .auth import sign_session, verify_session, COOKIE_NAME
+from db import Base, engine, get_db
+from settings import settings
+
+from auth import sign_session, verify_session, COOKIE_NAME
 from pathlib import Path
-from shared.db_models import (
+from db_models import (
     Setting,
     DailyPlan,
     PostDraft,
@@ -21,11 +23,42 @@ from shared.db_models import (
     ApprovalStatus,
     ContentType,
     ActionMode,
+    AppLog,
 )
+### Init app
 
 app = FastAPI(title="H2N Agent Control Plane", version="0.1.0")
 
+### Templates
+
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+### Logging middleware wire-in ###
+
+from middleware.request_id import RequestIDMiddleware
+app.add_middleware(RequestIDMiddleware)
+
+from middleware.access_log import AccessLogMiddleware
+app.add_middleware(AccessLogMiddleware)
+
+### Logging init ###
+
+from logging_setup import configure_structured_logging
+from db_log_handler import DBLogHandler
+
+SERVICE_NAME = os.getenv("SERVICE_NAME", "api")
+
+configure_structured_logging(SERVICE_NAME)
+
+# Attach DB handler to root logger for admin visibility
+db_handler = DBLogHandler()
+db_handler.setLevel(os.getenv("DB_LOG_LEVEL", "INFO").upper())
+logging.getLogger().addHandler(db_handler)
+
+log = structlog.get_logger(__name__)
+log.info("api_startup", service=SERVICE_NAME)
+
+###
 
 # MVP: auto-create tables (later you can switch to Alembic)
 Base.metadata.create_all(bind=engine)
@@ -126,6 +159,49 @@ def admin_home(
         "settings": settings_map,
         "user": user,
     })
+
+# --- Admin Logs ---
+
+@app.get("/admin/logs", response_class=HTMLResponse)
+def admin_logs(
+    request: Request,
+    level: str | None = None,
+    service: str | None = None,
+    q: str | None = None,
+    page: int = 1,
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    page = max(page, 1)
+    page_size = 200
+    offset = (page - 1) * page_size
+
+    query = db.query(AppLog).order_by(AppLog.id.desc())
+
+    if level:
+        query = query.filter(AppLog.level == level.upper())
+    if service:
+        query = query.filter(AppLog.service == service)
+    if q:
+        query = query.filter(AppLog.message.ilike(f"%{q}%"))
+
+    total = query.count()
+    logs = query.offset(offset).limit(page_size).all()
+
+    return templates.TemplateResponse(
+        "logs.html",
+        {
+            "request": request,
+            "user": user,
+            "logs": logs,
+            "level": level,
+            "service": service,
+            "q": q,
+            "page": page,
+            "has_prev": page > 1,
+            "has_next": offset + page_size < total,
+        },
+    )
 
 # --- Admin UI: Posts ---
 
@@ -449,23 +525,3 @@ def approve_outreach(
     db.commit()
 
     return RedirectResponse(url="/admin/outreach", status_code=303)
-
-# ---- Simple Admin Page (mobile-friendly) ----
-
-@app.get("/", response_class=HTMLResponse)
-def admin_home(request: Request, db: Session = Depends(get_db), x_admin_token: str | None = Header(default=None)):
-    # light auth: require header token to view admin
-    if x_admin_token != settings.admin_token:
-        raise HTTPException(status_code=401, detail="Unauthorized (set x-admin-token header)")
-    pending_posts = db.query(PostDraft).filter(PostDraft.status == ApprovalStatus.pending).count()
-    pending_eng = db.query(EngagementQueueItem).filter(EngagementQueueItem.status == ApprovalStatus.pending).count()
-    pending_out = db.query(OutreachDraft).filter(OutreachDraft.status == ApprovalStatus.pending).count()
-    settings_map = {s.key: s.value for s in db.query(Setting).all()}
-
-    return templates.TemplateResponse("admin.html", {
-        "request": request,
-        "pending_posts": pending_posts,
-        "pending_eng": pending_eng,
-        "pending_out": pending_out,
-        "settings": settings_map,
-    })

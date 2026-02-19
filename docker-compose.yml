@@ -41,6 +41,9 @@ services:
       LLM_PROVIDER: ollama
       OLLAMA_BASE_URL: http://ollama:11434
       PYTHONPATH: /app:/shared
+      SERVICE_NAME: api
+      LOG_LEVEL: INFO
+      DB_LOG_LEVEL: INFO
     depends_on:
       - db
       - redis
@@ -48,9 +51,8 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./services/api:/app
-      - ./shared:/app/shared
-      
+      - ./services/api/app:/app
+      - ./shared:/shared      
     restart: unless-stopped
 
   worker:
@@ -63,14 +65,17 @@ services:
       REDIS_URL: redis://redis:6379/0
       LLM_PROVIDER: ollama
       OLLAMA_BASE_URL: http://ollama:11434
-      PYTHONPATH: /app
+      PYTHONPATH: /app:/shared
+      SERVICE_NAME: worker
+      LOG_LEVEL: INFO
+      DB_LOG_LEVEL: INFO
     depends_on:
       - db
       - redis
       - ollama
     volumes:
       - ./services/worker/app:/app
-      - ./shared:/app/shared
+      - ./shared:/shared
       - agent_logs:/logs
     restart: unless-stopped
 
@@ -103,6 +108,10 @@ services:
     command: sleep infinity
     shm_size: "1gb"
     restart: unless-stopped
+    environment:
+      SERVICE_NAME: playwright
+      LOG_LEVEL: INFO
+      DB_LOG_LEVEL: INFO
 
 
 volumes:

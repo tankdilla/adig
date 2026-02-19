@@ -10,7 +10,7 @@ from agents.content_intel.parsers import (
 )
 from agents.content_intel.ideation import build_daily_plan, generate_reel_ideas
 
-from shared.db_models import (
+from db_models import (
     DailyPlan,
     PostDraft,
     ApprovalStatus,
