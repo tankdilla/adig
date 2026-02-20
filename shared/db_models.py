@@ -83,6 +83,10 @@ class PostDraft(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
+    shoot_pack: Mapped[str] = mapped_column(Text, nullable=True)          # structured shoot pack text
+    posted_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)  # when you actually posted
+    ig_url: Mapped[str] = mapped_column(Text, nullable=True)              # optional IG URL
+
 class EngagementQueueItem(Base):
     __tablename__ = "engagement_queue"
 

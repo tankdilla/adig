@@ -4,7 +4,7 @@ import json
 import re
 
 from datetime import date
-from typing import Dict, List
+from typing import Any, Dict, List, Optional
 from agents.llm import think, draft
 
 BRAND_SYSTEM = """You are a content strategist for Hello To Natural, a faith-friendly natural wellness brand.
@@ -32,59 +32,128 @@ Output a short daily plan with:
 """
     return think(prompt, system=BRAND_SYSTEM, temperature=0.3)
 
-def generate_reel_ideas(signals: Dict, n: int = 5) -> List[Dict]:
+def _normalize_ideas(items: Any, n: int) -> List[Dict[str, Any]]:
+    """
+    Guarantees a list of dicts with keys we expect.
+    Also coerces list fields into lists, strips strings, and truncates to n.
+    """
+    if not isinstance(items, list):
+        return []
+
+    out: List[Dict[str, Any]] = []
+    for it in items[:n]:
+        if not isinstance(it, dict):
+            continue
+
+        broll = it.get("broll", [])
+        if isinstance(broll, str):
+            broll = [b.strip() for b in broll.split(",") if b.strip()]
+        if not isinstance(broll, list):
+            broll = []
+
+        hashtags = it.get("hashtags", [])
+        if isinstance(hashtags, str):
+            # allow "#a #b" or "a,b"
+            hashtags = re.split(r"[\s,]+", hashtags.strip())
+            hashtags = [h for h in hashtags if h]
+        if not isinstance(hashtags, list):
+            hashtags = []
+
+        idea = {
+            "hook": str(it.get("hook", "")).strip(),
+            "concept": str(it.get("concept", "")).strip(),
+            "script_outline": str(it.get("script_outline", "")).strip(),
+            "broll": broll,
+            "caption": str(it.get("caption", "")).strip(),
+            "hashtags": hashtags,
+        }
+
+        # require minimally useful fields
+        if idea["hook"] and idea["concept"]:
+            out.append(idea)
+
+    return out
+
+# ---------- main function ----------
+
+def generate_reel_ideas(signals: Dict[str, Any], n: int = 5) -> List[Dict[str, Any]]:
+    """
+    Returns a list of n reel ideas as strict JSON (with repair pass + normalization).
+    """
+
     prompt = f"""
-Create {n} Reel ideas for today based on these public trend signals.
-Each idea must include:
-- hook (<= 90 characters)
-- caption (80–180 words)
-- hashtags (10–18, newline separated)
-- media_notes (what to film + on-screen text)
-- content_type: reel
+You are generating Instagram Reel ideas for the brand Hello To Natural (H2N).
+Use the trend signals below as inspiration, but keep it brand-safe and realistic.
 
-Signals:
-Google Trends: {signals.get("trends", [])[:12]}
-YouTube: {signals.get("youtube", [])[:12]}
-Reddit: {signals.get("reddit", [])[:12]}
+Trend Signals (summarized):
+{json.dumps(signals, indent=2)[:8000]}
 
-Constraints:
-- No medical claims. Use language like "may help", "some people find", "talk to your clinician".
-- Stay consistent with Hello To Natural (plant-forward, natural living, faith-friendly encouragement).
-- Avoid fear hooks. Use curiosity + hope.
+Requirements:
+- Generate exactly {n} ideas.
+- Each idea must be UNIQUE.
+- Content must be safe and avoid medical claims.
+- Make them practical, engaging, and aligned with H2N body care / self-care vibe.
+- Tone: fun, sexy, playful, confident, but tasteful.
+
+JSON OUTPUT CONTRACT (strict):
 Return ONLY valid JSON.
-Do not include markdown.
-Do not include backticks.
-Do not include commentary.
-Output must be a JSON array of {n} objects, each with:
-- hook
-- concept
-- script_outline
-- broll
-- caption
-- hashtags
+No markdown, no code fences, no commentary.
+Output must be a JSON array of {n} objects, each with EXACT keys:
+- hook (string)
+- concept (string)
+- script_outline (string)
+- broll (array of strings)
+- caption (string)
+- hashtags (array of strings)
 """
+
     raw = draft(prompt, system=BRAND_SYSTEM, temperature=0.6)
 
-    print("IDEATION RAW (first 400):", repr(raw[:400]))
-    
-    # data = _safe_json_load(raw)
-    # return data
+    # Helpful debug if it fails in logs
+    if not raw or not raw.strip():
+        # Try one repair immediately
+        raw = draft(
+            f"Return ONLY valid JSON per the contract. Generate {n} ideas now.",
+            system=BRAND_SYSTEM,
+            temperature=0.2,
+        )
 
     try:
-        return _safe_json_load(raw)
-    except Exception as e:
+        parsed = _safe_json_load(raw)
+    except Exception:
+        # Repair pass: ask model to convert its own output into valid JSON only
         repair_prompt = f"""
-    You returned invalid JSON.
+You returned invalid JSON.
 
-    Fix it and return ONLY valid JSON (no markdown, no commentary).
-    It must be a JSON array of {n} objects with keys:
-    hook, concept, script_outline, broll, caption, hashtags.
+Fix it and return ONLY valid JSON (no markdown, no commentary).
+It must be a JSON array of {n} objects with EXACT keys:
+hook, concept, script_outline, broll, caption, hashtags.
 
-    Here is your previous output:
-    {raw}
-    """
+Here is your previous output:
+{raw}
+"""
         fixed = draft(repair_prompt, system=BRAND_SYSTEM, temperature=0.2)
-        return _safe_json_load(fixed)
+        parsed = _safe_json_load(fixed)
+
+    ideas = _normalize_ideas(parsed, n=n)
+
+    # Last resort fallback: if model gave parsed JSON but empty/invalid structure
+    if len(ideas) < n:
+        # Fill missing with a safe minimal fallback rather than crashing the pipeline
+        while len(ideas) < n:
+            ideas.append(
+                {
+                    "hook": "Glow check: what’s in your body butter?",
+                    "concept": "Quick ingredient + texture education with a fun ASMR whip shot.",
+                    "script_outline": "Show the butter texture, explain 1–2 key benefits, end with CTA to shop.",
+                    "broll": ["whipping butter close-up", "hand application", "product label shot"],
+                    "caption": "Soft skin season is here. Which butter are you grabbing today?",
+                    "hashtags": ["#hellotonatural", "#bodybutter", "#selfcare", "#skincare"],
+                }
+            )
+        ideas = ideas[:n]
+
+    return ideas
 
 
 def _strip_fences(s: str) -> str:

@@ -12,7 +12,8 @@ RUN pip install --no-cache-dir \
   jinja2 python-multipart \
   itsdangerous \
   celery redis \
-  structlog==24.1.0 python-json-logger==2.0.7
+  structlog==24.1.0 python-json-logger==2.0.7 \
+  alembic>=1.13 psycopg2-binary>=2.9
 
 COPY app /app
 

@@ -6,7 +6,7 @@ from fastapi import FastAPI, Depends, Header, HTTPException, Request, Form, stat
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from datetime import datetime, date
+from datetime import datetime, date, time, timedelta
 
 from db import Base, engine, get_db
 from settings import settings
@@ -60,7 +60,6 @@ log.info("api_startup", service=SERVICE_NAME)
 
 ###
 
-# MVP: auto-create tables (later you can switch to Alembic)
 Base.metadata.create_all(bind=engine)
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
@@ -208,23 +207,65 @@ def admin_logs(
 @app.get("/admin/posts", response_class=HTMLResponse)
 def admin_posts(
     request: Request,
+    view: str = "pending",
+    q: str | None = None,
     status: ApprovalStatus = ApprovalStatus.pending,
     db: Session = Depends(get_db),
     user: str = Depends(require_admin),
 ):
-    items = (
-        db.query(PostDraft)
-        .filter(PostDraft.status == status)
-        .order_by(PostDraft.created_at.desc())
-        .limit(200)
-        .all()
+    query = db.query(PostDraft)
+
+    # quick views
+    today = date.today()
+    start = datetime.combine(today, time.min)
+    end = start + timedelta(days=1)
+
+    if view == "generated_today":
+        query = query.filter(PostDraft.created_at >= start, PostDraft.created_at < end)
+    elif view == "scheduled_today":
+        query = query.filter(PostDraft.scheduled_for >= start, PostDraft.scheduled_for < end)
+    elif view == "pending":
+        query = query.filter(PostDraft.status == ApprovalStatus.pending)
+
+    # status filter (works with the buttons ?status=pending/approved/rejected)
+    if status:
+        query = query.filter(PostDraft.status == status)
+
+    if view != "all":
+        query = query.filter(PostDraft.status == status)
+
+    # optional text search
+    if q:
+        like = f"%{q}%"
+        query = query.filter(or_(PostDraft.hook.ilike(like), PostDraft.caption.ilike(like)))
+
+    posts = query.order_by(PostDraft.created_at.desc()).limit(200).all()
+
+    return templates.TemplateResponse(
+        "posts.html",
+        {
+            "request": request,
+            "items": posts,
+            "view": view,
+            "q": q or "",
+            "status": status.value,
+            "user": user,
+        },
     )
-    return templates.TemplateResponse("posts.html", {
-        "request": request,
-        "user": user,
-        "status": status.value,
-        "items": items,
-    })
+
+    # items = (
+    #     db.query(PostDraft)
+    #     .filter(PostDraft.status == status)
+    #     .order_by(PostDraft.created_at.desc())
+    #     .limit(200)
+    #     .all()
+    # )
+    # return templates.TemplateResponse("posts.html", {
+    #     "request": request,
+    #     "user": user,
+    #     "status": status.value,
+    #     "items": items,
+    # })
 
 # --- Admin UI: Engagement ---
 

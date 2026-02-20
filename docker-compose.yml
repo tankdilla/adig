@@ -76,7 +76,9 @@ services:
     volumes:
       - ./services/worker/app:/app
       - ./shared:/shared
-      - agent_logs:/logs
+      # - agent_logs:/logs
+      - ./agent_logs:/logs
+
     restart: unless-stopped
 
   scheduler:

@@ -1,5 +1,6 @@
 import os
 import asyncio
+import time
 from celery_app import celery
 from agents.safety import guardrails_ok
 from agents.content_intel.pipeline import run_content_intel
@@ -14,11 +15,34 @@ log = structlog.get_logger(__name__)
 @celery.task(name="tasks.content_intel_daily")
 def content_intel_daily():
     clear_contextvars()
-    bind_contextvars(task_id=content_intel_daily.request.id)
-    log.info("task_started", event="content_intel_daily")
-    result = run_content_intel()
-    log.info("task_finished", event="content_intel_daily", result=result)
-    return result
+
+    # Safely bind task id
+    task_id = getattr(content_intel_daily.request, "id", None)
+    bind_contextvars(task="content_intel_daily", task_id=task_id)
+
+    start = time.time()
+    log.info("task_started")
+
+    try:
+        result = run_content_intel()
+        duration_ms = int((time.time() - start) * 1000)
+
+        log.info(
+            "task_finished",
+            duration_ms=duration_ms,
+            result_summary=result,
+        )
+        return result
+
+    except Exception as e:
+        duration_ms = int((time.time() - start) * 1000)
+
+        log.exception(
+            "task_failed",
+            duration_ms=duration_ms,
+            error=str(e),
+        )
+        raise
 
 # @celery.task(name="tasks.creator_discovery_weekly")
 # def creator_discovery_weekly():
