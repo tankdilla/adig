@@ -38,6 +38,8 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-h2n}:${POSTGRES_PASSWORD:-h2n_password}@db:5432/${POSTGRES_DB:-h2n}
       REDIS_URL: redis://redis:6379/0
       CONTENT_INTEL_TASK: tasks.content_intel_daily
+      BUILD_SHOOT_PACK_TASK: tasks.build_shoot_pack
+      BUILD_BROLL_PACK_TASK: tasks.build_broll_pack
       LLM_PROVIDER: ollama
       OLLAMA_BASE_URL: http://ollama:11434
       PYTHONPATH: /app:/shared

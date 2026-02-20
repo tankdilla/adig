@@ -5,11 +5,13 @@ from celery import Celery
 from fastapi import FastAPI, Depends, Header, HTTPException, Request, Form, status
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import and_
 from sqlalchemy.orm import Session
 from datetime import datetime, date, time, timedelta
 
 from db import Base, engine, get_db
 from settings import settings
+import json
 
 from auth import sign_session, verify_session, COOKIE_NAME
 from pathlib import Path
@@ -64,6 +66,8 @@ Base.metadata.create_all(bind=engine)
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 CONTENT_INTEL_TASK = os.getenv("CONTENT_INTEL_TASK", "tasks.content_intel_daily")
+BUILD_SHOOT_PACK_TASK = os.getenv("BUILD_SHOOT_PACK_TASK", "tasks.build_shoot_pack")
+BUILD_BROLL_PACK_TASK = os.getenv("BUILD_BROLL_PACK_TASK", "tasks.build_broll_pack")
 
 celery_client = Celery("h2n_api_client", broker=REDIS_URL, backend=REDIS_URL)
 
@@ -253,20 +257,6 @@ def admin_posts(
         },
     )
 
-    # items = (
-    #     db.query(PostDraft)
-    #     .filter(PostDraft.status == status)
-    #     .order_by(PostDraft.created_at.desc())
-    #     .limit(200)
-    #     .all()
-    # )
-    # return templates.TemplateResponse("posts.html", {
-    #     "request": request,
-    #     "user": user,
-    #     "status": status.value,
-    #     "items": items,
-    # })
-
 # --- Admin UI: Engagement ---
 
 @app.get("/admin/engagement", response_class=HTMLResponse)
@@ -313,7 +303,7 @@ def admin_outreach(
         "items": items,
     })
 
-# --- Admin UI: Generate Today ---
+# --- Admin UI: Generate Today (celery task) ---
 
 @app.post("/admin/generate-today")
 def generate_today(
@@ -445,6 +435,8 @@ def list_post_drafts(
         "created_at": p.created_at,
     } for p in items]
 
+### Approve post
+
 @app.post("/posts/{post_id}/approve")
 def approve_post(
     request: Request,
@@ -473,6 +465,203 @@ def approve_post(
 
     # UI-friendly redirect
     return RedirectResponse(url="/admin/posts", status_code=303)
+
+### Mark posted
+
+@app.post("/posts/{post_id}/posted")
+def mark_posted(
+    post_id: int,
+    ig_url: str | None = Form(default=None),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    pd = db.query(PostDraft).filter(PostDraft.id == post_id).first()
+    if not pd:
+        raise HTTPException(status_code=404, detail="PostDraft not found")
+
+    pd.posted_at = datetime.utcnow()
+    if ig_url:
+        pd.ig_url = ig_url.strip()
+
+    db.add(pd)
+    db.commit()
+
+    return RedirectResponse(url="/admin/queue", status_code=303)
+
+### Unpost (in case of misclick, posted_at & ig_url = None)
+
+@app.post("/posts/{post_id}/unposted")
+def unpost(
+    post_id: int,
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    pd = db.query(PostDraft).filter(PostDraft.id == post_id).first()
+    if not pd:
+        raise HTTPException(status_code=404, detail="PostDraft not found")
+
+    pd.posted_at = None
+    pd.ig_url = None
+    db.add(pd)
+    db.commit()
+
+    return RedirectResponse(url="/admin/queue", status_code=303)
+
+### Admin queue
+
+@app.get("/admin/queue", response_class=HTMLResponse)
+def admin_queue(
+    request: Request,
+    day: str | None = None,                 # optional YYYY-MM-DD
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    # focus day (defaults today)
+    if day:
+        d = date.fromisoformat(day)
+    else:
+        d = date.today()
+
+    start = datetime.combine(d, time.min)
+    end = start + timedelta(days=1)
+
+    items_today = (
+        db.query(PostDraft)
+        .filter(PostDraft.status == ApprovalStatus.approved)
+        .filter(PostDraft.scheduled_for >= start, PostDraft.scheduled_for < end)
+        .filter(PostDraft.posted_at.is_(None))  # <-- important
+        .order_by(PostDraft.scheduled_for.asc())
+        .all()
+    )
+
+    # for p in items_today:
+    #     p.shoot_pack_obj = _shoot_pack_obj(p)
+
+    backlog = (
+        db.query(PostDraft)
+        .filter(PostDraft.status == ApprovalStatus.approved)
+        .filter(PostDraft.scheduled_for.is_(None))
+        .filter(PostDraft.posted_at.is_(None))
+        .order_by(PostDraft.created_at.desc())
+        .limit(200)
+        .all()
+    )
+
+    # for p in backlog:
+    #     p.shoot_pack_obj = _shoot_pack_obj(p)
+
+    # Recently posted
+    posted_recent = (
+        db.query(PostDraft)
+        .filter(PostDraft.posted_at.is_not(None))
+        .order_by(PostDraft.posted_at.desc())
+        .limit(50)
+        .all()
+    )
+
+    return templates.TemplateResponse(
+        "queue.html",
+        {
+            "request": request,
+            "user": user,
+            "day": d.isoformat(),
+            "items_today": items_today,
+            "backlog": backlog,
+            "posted_recent": posted_recent,
+        },
+    )
+
+### Helper
+# def _shoot_pack_obj(p):
+#     if not p.shoot_pack:
+#         return None
+#     try:
+#         return json.loads(p.shoot_pack)
+#     except Exception:
+#         return {"_raw": p.shoot_pack, "_error": "Invalid JSON"}
+
+### Trigger shoot pack
+
+@app.post("/posts/{post_id}/shoot-pack")
+def trigger_shoot_pack(
+    post_id: int,
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    pd = db.query(PostDraft).filter(PostDraft.id == post_id).first()
+    if not pd:
+        raise HTTPException(status_code=404, detail="PostDraft not found")
+
+    # enqueue task
+    # build_shoot_pack.delay(post_id)
+    # enqueue Celery task
+    celery_client.send_task(
+        BUILD_SHOOT_PACK_TASK,   # "tasks.build_shoot_pack"
+        args=[post_id],
+    )
+
+    return RedirectResponse(url="/admin/queue", status_code=303)
+
+### Trigger b-roll pack
+
+@app.post("/posts/{post_id}/broll-pack")
+def trigger_broll_pack(
+    post_id: int,
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    pd = db.query(PostDraft).filter(PostDraft.id == post_id).first()
+    if not pd:
+        raise HTTPException(status_code=404, detail="PostDraft not found")
+
+    celery_client.send_task(BUILD_BROLL_PACK_TASK, args=[post_id])
+    return RedirectResponse(url="/admin/queue", status_code=303)
+
+### Schedule post (just sets schedule_for field)
+
+@app.post("/posts/{post_id}/schedule")
+def schedule_post(
+    post_id: int,
+    scheduled_for: str = Form(...),  # from <input type="datetime-local">
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    pd = db.query(PostDraft).filter(PostDraft.id == post_id).first()
+    if not pd:
+        raise HTTPException(status_code=404, detail="PostDraft not found")
+
+    if not pd.shoot_pack:
+        raise HTTPException(status_code=400, detail="Generate shoot pack before scheduling")
+
+    # datetime-local comes in like "2026-02-20T14:30"
+    try:
+        dt = datetime.fromisoformat(scheduled_for)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid scheduled_for datetime")
+
+    pd.scheduled_for = dt
+    db.add(pd)
+    db.commit()
+
+    return RedirectResponse(url="/admin/queue", status_code=303)
+
+### Unschedule post (scheduled_for set to None)
+
+@app.post("/posts/{post_id}/unschedule")
+def unschedule_post(
+    post_id: int,
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    pd = db.query(PostDraft).filter(PostDraft.id == post_id).first()
+    if not pd:
+        raise HTTPException(status_code=404, detail="PostDraft not found")
+
+    pd.scheduled_for = None
+    db.add(pd)
+    db.commit()
+
+    return RedirectResponse(url="/admin/queue", status_code=303)
 
 # ---- Engagement queue ----
 

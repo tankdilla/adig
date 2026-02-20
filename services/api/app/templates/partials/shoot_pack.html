@@ -1,0 +1,77 @@
+{# templates/partials/shoot_pack.html #}
+
+{% if shoot_pack_obj %}
+  {% if shoot_pack_obj._error %}
+    <div class="card" style="border-color:#f0c;">
+      <b>Couldn’t parse shoot pack JSON</b>
+      <div class="muted">{{ shoot_pack_obj._raw }}</div>
+    </div>
+  {% else %}
+    <div class="grid">
+      <div class="box">
+        <h4>Concept</h4>
+        <div class="small">
+          {% if shoot_pack_obj.title %}<b>{{ shoot_pack_obj.title }}</b><br>{% endif %}
+          {% if shoot_pack_obj.concept %}{{ shoot_pack_obj.concept }}{% endif %}
+        </div>
+      </div>
+
+      <div class="box">
+        <h4>Hook</h4>
+        <div class="small">
+          {{ shoot_pack_obj.hook_line or hook or "" }}
+        </div>
+      </div>
+
+      <div class="box">
+        <h4>Shot list / B-roll</h4>
+        {% set shots = shoot_pack_obj.shots or shoot_pack_obj.broll or [] %}
+        {% if shots %}
+          <ul class="clean">
+            {% for s in shots %}<li>{{ s }}</li>{% endfor %}
+          </ul>
+        {% else %}
+          <div class="muted">None provided.</div>
+        {% endif %}
+      </div>
+
+      <div class="box">
+        <h4>Script beats</h4>
+        {% set beats = shoot_pack_obj.script_beats or shoot_pack_obj.beats or [] %}
+        {% if beats %}
+          <ul class="clean">
+            {% for b in beats %}<li>{{ b }}</li>{% endfor %}
+          </ul>
+        {% else %}
+          <div class="muted">None provided.</div>
+        {% endif %}
+      </div>
+
+      <div class="box" style="grid-column: 1 / -1;">
+        <h4>On-screen text</h4>
+        {% set ost = shoot_pack_obj.on_screen_text or [] %}
+        {% if ost %}
+          <ul class="clean">
+            {% for t in ost %}<li>{{ t }}</li>{% endfor %}
+          </ul>
+        {% else %}
+          <div class="muted">None provided.</div>
+        {% endif %}
+      </div>
+
+      <div class="box" style="grid-column: 1 / -1;">
+        <h4>Caption + hashtags</h4>
+        <div class="mono">{{ shoot_pack_obj.caption or caption or "" }}</div>
+
+        {% set tags = shoot_pack_obj.hashtags or [] %}
+        {% if tags %}
+          <div style="margin-top:8px;">
+            {% for t in tags %}<span class="tag">#{{ t }}</span>{% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+{% else %}
+  <div class="muted" style="margin-top:10px;">Shoot pack not generated yet.</div>
+{% endif %}

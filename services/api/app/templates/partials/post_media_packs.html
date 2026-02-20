@@ -1,0 +1,13 @@
+{# templates/partials/post_media_packs.html #}
+
+{# Shoot Pack #}
+<div class="muted" style="margin-top:10px;"><b>Shoot Pack</b></div>
+{% set shoot_pack_obj = p.shoot_pack_obj %}
+{% set hook = p.hook %}
+{% set caption = p.caption %}
+{% include "partials/shoot_pack.html" %}
+
+{# B-roll Manifest #}
+<div class="muted" style="margin-top:10px;"><b>B-roll Manifest</b></div>
+{% set broll_obj = p.broll_obj %}
+{% include "partials/broll_manifest.html" %}

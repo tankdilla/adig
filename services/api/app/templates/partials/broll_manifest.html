@@ -1,0 +1,80 @@
+{# templates/partials/broll_manifest.html #}
+
+{% if broll_obj %}
+  {% if broll_obj._error %}
+    <div class="card" style="border-color:#f0c;">
+      <b>Couldn’t parse B-roll manifest JSON</b>
+      <div class="muted">{{ broll_obj._raw }}</div>
+    </div>
+  {% else %}
+    <div class="grid">
+      <div class="box">
+        <h4>Keywords</h4>
+        {% set kws = broll_obj.keywords or [] %}
+        {% if kws %}
+          <div>
+            {% for k in kws %}<span class="tag">{{ k }}</span>{% endfor %}
+          </div>
+        {% else %}
+          <div class="muted">None provided.</div>
+        {% endif %}
+      </div>
+
+      <div class="box">
+        <h4>Download folder</h4>
+        <div class="small">
+          {{ broll_obj.out_dir or "Not downloaded (manifest only)" }}
+        </div>
+      </div>
+
+      <div class="box" style="grid-column: 1 / -1;">
+        <h4>Clips</h4>
+        {% set clips = broll_obj.clips or [] %}
+        {% if clips %}
+          <ul class="clean">
+            {% for c in clips %}
+              <li style="margin-bottom:10px;">
+                <div class="small">
+                  <b>{{ c.query }}</b>
+                  {% if c.width and c.height %}
+                    <span class="muted"> ({{ c.width }}×{{ c.height }})</span>
+                  {% endif %}
+                </div>
+
+                <div class="muted">
+                  {% if c.creator %}
+                    By <b>{{ c.creator }}</b>
+                    {% if c.creator_url %} — <a href="{{ c.creator_url }}" target="_blank" rel="noopener noreferrer">creator</a>{% endif %}
+                  {% endif %}
+                  {% if c.page_url %} — <a href="{{ c.page_url }}" target="_blank" rel="noopener noreferrer">Pexels page</a>{% endif %}
+                </div>
+
+                {% if c.local_path %}
+                  <div class="mono">{{ c.local_path }}</div>
+                {% elif c.file_url %}
+                  <div class="muted"><a href="{{ c.file_url }}" target="_blank" rel="noopener noreferrer">Direct file URL</a></div>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="muted">No clips found yet.</div>
+        {% endif %}
+      </div>
+
+      <div class="box" style="grid-column: 1 / -1;">
+        <h4>Attribution</h4>
+        {% set a = broll_obj.attribution or [] %}
+        {% if a %}
+          <ul class="clean">
+            {% for line in a %}<li>{{ line }}</li>{% endfor %}
+          </ul>
+        {% else %}
+          <div class="muted">None generated.</div>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+{% else %}
+  <div class="muted" style="margin-top:10px;">B-roll manifest not generated yet.</div>
+{% endif %}

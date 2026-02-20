@@ -7,6 +7,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship, DeclarativeBase
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 
+import json
+from functools import cached_property
+
 class Base(DeclarativeBase):
     pass
 
@@ -86,6 +89,26 @@ class PostDraft(Base):
     shoot_pack: Mapped[str] = mapped_column(Text, nullable=True)          # structured shoot pack text
     posted_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)  # when you actually posted
     ig_url: Mapped[str] = mapped_column(Text, nullable=True)              # optional IG URL
+
+    broll_manifest: Mapped[str] = mapped_column(Text, nullable=True)  # JSON text
+    broll_dir: Mapped[str] = mapped_column(String(255), nullable=True)
+
+    @staticmethod
+    def _safe_json(raw: str | None):
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except Exception:
+            return {"_error": True, "_raw": raw}
+
+    @cached_property
+    def shoot_pack_obj(self):
+        return self._safe_json(self.shoot_pack)
+
+    @cached_property
+    def broll_obj(self):
+        return self._safe_json(self.broll_manifest)
 
 class EngagementQueueItem(Base):
     __tablename__ = "engagement_queue"

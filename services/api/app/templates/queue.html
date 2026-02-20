@@ -1,0 +1,157 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Queue — H2N</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; max-width: 980px; margin: 0 auto; }
+    .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; margin: 12px 0; }
+    .muted { color: #666; font-size: 14px; white-space: pre-wrap; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; white-space: pre-wrap; }
+    .row { display:flex; gap: 10px; flex-wrap: wrap; align-items:center; justify-content: space-between; }
+    .pill { display:inline-block; padding:6px 10px; border-radius: 999px; background:#f2f2f2; }
+    button { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; background: white; cursor:pointer; }
+    input { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; }
+    .actions { display:flex; gap: 10px; flex-wrap: wrap; align-items:center; }
+    .danger { border-color:#c00; }
+  
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .box { border: 1px solid #eee; border-radius: 12px; padding: 10px; }
+    .box h4 { margin: 0 0 8px 0; font-size: 14px; }
+    ul.clean { margin: 0; padding-left: 18px; }
+    .tag { display:inline-block; padding:4px 8px; border-radius:999px; background:#f6f6f6; margin: 3px 6px 0 0; font-size: 12px; }
+    .small { font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="row" style="margin-bottom: 10px;">
+    <div>
+      <h2>Execution Queue</h2>
+      <div class="muted">Signed in as <b>{{ user }}</b></div>
+    </div>
+    <div class="actions">
+      <a href="/admin"><button type="button">Home</button></a>
+      <a href="/admin/posts?view=pending"><button type="button">Approvals</button></a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div><b>Focus day:</b> <span class="pill">{{ day }}</span></div>
+      <form method="get" action="/admin/queue" class="actions">
+        <input name="day" value="{{ day }}" placeholder="YYYY-MM-DD" />
+        <button type="submit">Go</button>
+      </form>
+    </div>
+    <div class="muted">Shows approved posts scheduled for the day (and not yet posted), plus backlog items.</div>
+  </div>
+
+  <h3>Today’s scheduled (approved)</h3>
+  {% if not items_today %}
+    <div class="card">
+      <b>No scheduled approved posts for this day.</b>
+      <div class="muted">Approve a draft and set scheduled_for to see it here.</div>
+    </div>
+  {% endif %}
+
+  {% for p in items_today %}
+    <div class="card">
+      <div class="row">
+        <div>
+          <span class="pill">{{ p.content_type.value }}</span>
+          {% if p.scheduled_for %}<span class="pill">Scheduled: {{ p.scheduled_for }}</span>{% endif %}
+        </div>
+        <div class="actions">
+          <form method="post" action="/posts/{{ p.id }}/shoot-pack">
+            <button type="submit">Generate Shoot Pack 🎥</button>
+          </form>
+
+          <form method="post" action="/posts/{{ p.id }}/posted" class="actions">
+            <input name="ig_url" placeholder="IG URL (optional)" style="min-width:320px;" />
+            <button type="submit">Mark Posted ✅</button>
+          </form>
+
+          <form method="post" action="/posts/{{ p.id }}/unschedule">
+            <button type="submit" class="danger">Unschedule</button>
+          </form>
+          
+          {% if p.shoot_pack and not p.broll_manifest %}
+            <form method="post" action="/posts/{{ p.id }}/broll-pack">
+                <button type="submit">Fetch B-roll (Pexels) 🎬</button>
+            </form>
+        {% endif %}
+        </div>
+      </div>
+
+      {% if p.hook %}<h3>{{ p.hook }}</h3>{% endif %}
+      <div class="muted"><b>Caption</b></div>
+      <div class="mono">{{ p.caption }}</div>
+
+      {% if p.shoot_pack %}
+        <div class="muted" style="margin-top:10px;"><b>Shoot Pack</b></div>
+        {% include "partials/post_media_packs.html" %}
+
+      {% else %}
+        <div class="muted" style="margin-top:10px;">Shoot pack not generated yet.</div>
+      {% endif %}
+    </div>
+  {% endfor %}
+
+  <h3>Backlog (approved, unscheduled)</h3>
+  {% for p in backlog %}
+    <div class="card">
+      <div class="row">
+        <div>
+          <span class="pill">{{ p.content_type.value }}</span>
+          <span class="muted">Created: {{ p.created_at }}</span>
+        </div>
+        {% if not p.shoot_pack %}
+            <form method="post" action="/posts/{{ p.id }}/shoot-pack">
+                <button type="submit">Generate Shoot Pack 🎥</button>
+            </form>
+        {% endif %}
+
+        {% if p.shoot_pack and not p.broll_manifest %}
+            <form method="post" action="/posts/{{ p.id }}/broll-pack">
+                <button type="submit">Fetch B-roll (Pexels) 🎬</button>
+            </form>
+        {% endif %}
+
+        {% if p.shoot_pack %}
+        <form method="post" action="/posts/{{ p.id }}/schedule" class="actions">
+            <input type="datetime-local" name="scheduled_for" required />
+            <button type="submit">Schedule 📅</button>
+        </form>
+        {% endif %}
+      </div>
+      {% if p.hook %}<h3>{{ p.hook }}</h3>{% endif %}
+      <div class="mono">{{ p.caption }}</div>
+
+      {% if p.shoot_pack %}
+        <div class="muted" style="margin-top:10px;"><b>Shoot Pack</b></div>
+        {% include "partials/post_media_packs.html" %}
+        
+      {% else %}
+        <div class="muted" style="margin-top:10px;">Shoot pack not generated yet.</div>
+      {% endif %}
+    </div>
+  {% endfor %}
+
+  <h3>Recently posted</h3>
+  {% for p in posted_recent %}
+    <div class="card">
+      <div class="row">
+        <div>
+          <span class="pill">{{ p.content_type.value }}</span>
+          <span class="pill">Posted: {{ p.posted_at }}</span>
+        </div>
+        {% if p.ig_url %}
+          <a href="{{ p.ig_url }}" target="_blank" rel="noopener noreferrer">{{ p.ig_url }}</a>
+        {% endif %}
+      </div>
+      {% if p.hook %}<b>{{ p.hook }}</b>{% endif %}
+    </div>
+  {% endfor %}
+</body>
+</html>
