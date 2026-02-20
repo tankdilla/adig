@@ -26,6 +26,9 @@ from db_models import (
     ContentType,
     ActionMode,
     AppLog,
+    EngagementAction, 
+    EngagementStatus, 
+    EngagementActionType
 )
 ### Init app
 
@@ -68,6 +71,7 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 CONTENT_INTEL_TASK = os.getenv("CONTENT_INTEL_TASK", "tasks.content_intel_daily")
 BUILD_SHOOT_PACK_TASK = os.getenv("BUILD_SHOOT_PACK_TASK", "tasks.build_shoot_pack")
 BUILD_BROLL_PACK_TASK = os.getenv("BUILD_BROLL_PACK_TASK", "tasks.build_broll_pack")
+BUILD_ENGAGEMENT_QUEUE_TASK = os.getenv("BUILD_ENGAGEMENT_QUEUE_TASK", "tasks.build_engagement_queue")
 
 celery_client = Celery("h2n_api_client", broker=REDIS_URL, backend=REDIS_URL)
 
@@ -262,23 +266,120 @@ def admin_posts(
 @app.get("/admin/engagement", response_class=HTMLResponse)
 def admin_engagement(
     request: Request,
-    status: ApprovalStatus = ApprovalStatus.pending,
+    view: str = "pending",
     db: Session = Depends(get_db),
     user: str = Depends(require_admin),
 ):
-    items = (
-        db.query(EngagementQueueItem)
-        .filter(EngagementQueueItem.status == status)
-        .order_by(EngagementQueueItem.created_at.desc())
-        .limit(300)
-        .all()
+    q = db.query(EngagementAction).filter(EngagementAction.platform == "instagram")
+
+    if view == "pending":
+        q = q.filter(EngagementAction.status == EngagementStatus.pending)
+    elif view == "approved":
+        q = q.filter(EngagementAction.status == EngagementStatus.approved)
+    elif view == "executed":
+        q = q.filter(EngagementAction.status == EngagementStatus.executed)
+    elif view == "failed":
+        q = q.filter(EngagementAction.status == EngagementStatus.failed)
+
+    items = q.order_by(EngagementAction.created_at.desc()).limit(250).all()
+
+    return templates.TemplateResponse(
+        "engagement.html",
+        {"request": request, "items": items, "view": view, "user": user},
     )
-    return templates.TemplateResponse("engagement.html", {
-        "request": request,
-        "user": user,
-        "status": status.value,
-        "items": items,
-    })
+
+@app.post("/admin/engagement/targets")
+def add_engagement_targets(
+    request: Request,
+    raw: str = Form(...),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+    added = 0
+
+    for ln in lines:
+        parts = [p.strip() for p in ln.split("|")]
+        url = parts[0]
+        author = parts[1] if len(parts) > 1 else None
+        caption = parts[2] if len(parts) > 2 else None
+
+        row = EngagementAction(
+            platform="instagram",
+            target_url=url,
+            target_author=author,
+            target_caption=caption,
+            action_type=EngagementActionType.comment,
+            status=EngagementStatus.pending,
+        )
+        db.add(row)
+        added += 1
+
+    db.commit()
+    return RedirectResponse(url="/admin/engagement?view=pending", status_code=303)
+
+@app.post("/admin/engagement/generate")
+def generate_engagement_queue(
+    user: str = Depends(require_admin),
+):
+    celery_client.send_task(BUILD_ENGAGEMENT_QUEUE_TASK, args=[])
+    return RedirectResponse(url="/admin/engagement?view=pending", status_code=303)
+
+### Approve engagement
+@app.post("/engagement/{action_id}/approve")
+def approve_engagement_action(
+    action_id: int,
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    a = db.query(EngagementAction).filter(EngagementAction.id == action_id).first()
+    if not a:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    a.status = EngagementStatus.approved
+    a.approved_by = user
+    a.approved_at = datetime.utcnow()
+    db.add(a)
+    db.commit()
+    return RedirectResponse(url="/admin/engagement?view=pending", status_code=303)
+
+### Skip engagement
+@app.post("/engagement/{action_id}/skip")
+def skip_engagement_action(
+    action_id: int,
+    reason: str = Form(""),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    a = db.query(EngagementAction).filter(EngagementAction.id == action_id).first()
+    if not a:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    a.status = EngagementStatus.skipped
+    a.notes = reason or "skipped"
+    db.add(a)
+    db.commit()
+    return RedirectResponse(url="/admin/engagement?view=pending", status_code=303)
+
+### Mark executed
+@app.post("/engagement/{action_id}/executed")
+def mark_engagement_executed(
+    action_id: int,
+    note: str = Form(""),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    a = db.query(EngagementAction).filter(EngagementAction.id == action_id).first()
+    if not a:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    a.status = EngagementStatus.executed
+    a.executed_at = datetime.utcnow()
+    if note:
+        a.notes = note
+    db.add(a)
+    db.commit()
+    return RedirectResponse(url="/admin/engagement?view=approved", status_code=303)
 
 # --- Admin UI: Outreach ---
 
@@ -315,7 +416,7 @@ def generate_today(
     key = "CONTENT_INTEL_LAST_REQUESTED_AT"
     last = db.get(Setting, key)
 
-    from datetime import datetime, timedelta
+    # from datetime import datetime, timedelta
     now = datetime.utcnow()
 
     if last:

@@ -5,79 +5,90 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Engagement — H2N</title>
   <style>
-    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; max-width: 920px; margin: 0 auto; }
-    .top { display:flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; max-width: 980px; margin: 0 auto; }
     .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; margin: 12px 0; }
     .muted { color: #666; font-size: 14px; white-space: pre-wrap; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; white-space: pre-wrap; }
-    button { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; background: white; }
-    input { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; }
-    .row { display:flex; gap: 10px; flex-wrap: wrap; align-items:center; }
+    .row { display:flex; gap: 10px; flex-wrap: wrap; align-items:center; justify-content: space-between; }
     .pill { display:inline-block; padding:6px 10px; border-radius: 999px; background:#f2f2f2; }
-    .actions { display:flex; gap: 10px; flex-wrap: wrap; }
-    a { word-break: break-word; }
+    button { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; background: white; cursor:pointer; }
+    textarea, input { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; }
+    .actions { display:flex; gap: 10px; flex-wrap: wrap; align-items:center; }
+    .danger { border-color:#c00; }
   </style>
 </head>
 <body>
-  <div class="top">
+  <div class="row">
     <div>
-      <h2>Engagement Queue Approvals</h2>
+      <h2>Engagement Queue</h2>
       <div class="muted">Signed in as <b>{{ user }}</b></div>
     </div>
-    <div class="row">
+    <div class="actions">
       <a href="/admin"><button type="button">Home</button></a>
-      <a href="/admin/engagement?status=pending"><button type="button">Pending</button></a>
-      <a href="/admin/engagement?status=approved"><button type="button">Approved</button></a>
-      <a href="/admin/engagement?status=rejected"><button type="button">Rejected</button></a>
+      <form method="post" action="/admin/engagement/generate">
+        <button type="submit">Generate Comments (Safe Queue) ✍🏽</button>
+      </form>
     </div>
   </div>
 
-  <p class="pill">Showing: {{ status }}</p>
+  <div class="card">
+    <b>Add targets</b>
+    <div class="muted">Paste one per line: <span class="mono">url | author(optional) | caption(optional)</span></div>
+    <form method="post" action="/admin/engagement/targets">
+      <textarea name="raw" rows="5" placeholder="https://... | @author | caption snippet..."></textarea>
+      <div style="margin-top:10px;"><button type="submit">Add Targets ➕</button></div>
+    </form>
+  </div>
 
-  {% if not items %}
-    <div class="card">
-      <b>No items.</b>
-      <div class="muted">When the engagement agent runs, suggested actions show up here.</div:>
+  <div class="row" style="margin-top:10px;">
+    <div class="actions">
+      <a href="/admin/engagement?view=pending">Pending</a>
+      <a href="/admin/engagement?view=approved">Approved</a>
+      <a href="/admin/engagement?view=executed">Executed</a>
+      <a href="/admin/engagement?view=failed">Failed</a>
     </div>
-  {% endif %}
+    <div class="pill">View: {{ view }}</div>
+  </div>
 
-  {% for i in items %}
+  {% for a in items %}
     <div class="card">
       <div class="row">
-        <span class="pill">Like: {{ "yes" if i.action_like else "no" }}</span>
-        <span class="pill">Comment: {{ "yes" if i.action_comment else "no" }}</span>
-        {% if i.target_handle %}<span class="pill">@{{ i.target_handle }}</span>{% endif %}
-        <span class="muted">Created: {{ i.created_at }}</span>
+        <div>
+          <span class="pill">{{ a.action_type.value }}</span>
+          <span class="pill">{{ a.status.value }}</span>
+          {% if a.scheduled_for %}<span class="pill">Scheduled: {{ a.scheduled_for }}</span>{% endif %}
+        </div>
+        <div class="actions">
+          {% if a.status.value == "pending" and a.proposed_text %}
+            <form method="post" action="/engagement/{{ a.id }}/approve">
+              <button type="submit">Approve ✅</button>
+            </form>
+            <form method="post" action="/engagement/{{ a.id }}/skip">
+              <input name="reason" placeholder="Skip reason (optional)" style="min-width:220px;" />
+              <button type="submit" class="danger">Skip ❌</button>
+            </form>
+          {% endif %}
+
+          {% if a.status.value == "approved" %}
+            <form method="post" action="/engagement/{{ a.id }}/executed">
+              <input name="note" placeholder="Note (optional)" style="min-width:220px;" />
+              <button type="submit">Mark Executed ✅</button>
+            </form>
+          {% endif %}
+        </div>
       </div>
 
       <div class="muted"><b>Target</b></div>
-      <div class="mono"><a href="{{ i.target_url }}" target="_blank">{{ i.target_url }}</a></div>
+      <div><a href="{{ a.target_url }}" target="_blank" rel="noopener noreferrer">{{ a.target_url }}</a></div>
+      {% if a.target_author %}<div class="muted">Author: {{ a.target_author }}</div>{% endif %}
+      {% if a.target_caption %}<div class="muted">{{ a.target_caption }}</div>{% endif %}
 
-      {% if i.suggested_comment %}
-        <div class="muted" style="margin-top:10px;"><b>Suggested comment</b></div>
-        <div class="mono">{{ i.suggested_comment }}</div>
-      {% endif %}
-
-      {% if status == "pending" %}
-        <hr/>
-        <div class="actions">
-          <form method="post" action="/engagement/{{ i.id }}/approve">
-            <input type="hidden" name="approved" value="true" />
-            <input type="hidden" name="by" value="{{ user }}" />
-            <button type="submit">Approve ✅</button>
-          </form>
-
-          <form method="post" action="/engagement/{{ i.id }}/approve">
-            <input type="hidden" name="approved" value="false" />
-            <input type="hidden" name="by" value="{{ user }}" />
-            <button type="submit" style="border-color:#c00;">Reject ❌</button>
-          </form>
-        </div>
+      <div class="muted" style="margin-top:10px;"><b>Proposed comment</b></div>
+      {% if a.proposed_text %}
+        <div class="mono">{{ a.proposed_text }}</div>
+        <div class="muted" style="margin-top:6px;">Tip: copy/paste manually into IG to avoid automation risk.</div>
       {% else %}
-        <div class="muted" style="margin-top:10px;">
-          Status: <b>{{ i.status.value }}</b>
-          {% if i.approved_by %} — by {{ i.approved_by }}{% endif %}
-        </div>
+        <div class="muted">Not generated yet (click “Generate Comments”).</div>
       {% endif %}
     </div>
   {% endfor %}

@@ -2,6 +2,11 @@ import os
 import asyncio
 import time
 import json
+from datetime import datetime, timezone
+
+from agents.engagement.comments import generate_comment
+from agents.engagement.scheduler import schedule_actions
+from db_models import EngagementAction, EngagementActionType, EngagementStatus
 
 from celery_app import celery
 from agents.safety import guardrails_ok
@@ -67,6 +72,83 @@ def content_intel_daily():
 #     # This generates a queue of suggested comments/targets,
 #     # NOT actioning them unless ACTION_MODE=live and guardrails pass.
 #     return build_engagement_queue()
+
+@celery.task(name="tasks.build_engagement_queue")
+def build_engagement_queue():
+    """
+    Builds a controlled queue from 'targets' stored in DB.
+    MVP: targets are provided via admin UI as EngagementAction rows with action_type=comment and no proposed_text yet.
+    """
+    clear_contextvars()
+    task_id = getattr(build_engagement_queue.request, "id", None)
+    bind_contextvars(task="build_engagement_queue", task_id=task_id)
+    log.info("task_started")
+
+    db = SessionLocal()
+    try:
+        # Find comment actions missing text
+        pending = (
+            db.query(EngagementAction)
+            .filter(EngagementAction.action_type == EngagementActionType.comment)
+            .filter(EngagementAction.status == EngagementStatus.pending)
+            .filter((EngagementAction.proposed_text == None) | (EngagementAction.proposed_text == ""))  # noqa: E711
+            .order_by(EngagementAction.created_at.asc())
+            .limit(60)  # cap
+            .all()
+        )
+
+        if not pending:
+            log.info("no_targets")
+            return {"ok": True, "generated": 0}
+
+        # Grab recent generated comments to avoid repetition
+        recent = (
+            db.query(EngagementAction.proposed_text)
+            .filter(EngagementAction.action_type == EngagementActionType.comment)
+            .filter(EngagementAction.proposed_text != None)  # noqa: E711
+            .order_by(EngagementAction.created_at.desc())
+            .limit(30)
+            .all()
+        )
+        recent_comments = [r[0] for r in recent if r and r[0]]
+
+        # schedule times (default start now)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        scheduled_times = schedule_actions(len(pending), start_at=now, per_hour=25)
+
+        generated = 0
+        failed = 0
+
+        for i, row in enumerate(pending):
+            target = {
+                "caption": row.target_caption or "",
+                "author": row.target_author or "",
+                "url": row.target_url or "",
+                "topic_hint": "natural wellness, skincare, herbal living",
+            }
+            comment = generate_comment(target, recent_comments=recent_comments)
+            if not comment:
+                row.status = EngagementStatus.failed
+                row.notes = "LLM output failed quality rules"
+                failed += 1
+                continue
+
+            row.proposed_text = comment
+            row.scheduled_for = scheduled_times[i]
+            # stays pending until admin approves
+            generated += 1
+            recent_comments.append(comment)
+
+        db.commit()
+        log.info("task_finished", generated=generated, failed=failed)
+        return {"ok": True, "generated": generated, "failed": failed}
+
+    except Exception as e:
+        db.rollback()
+        log.exception("task_failed", error=str(e))
+        raise
+    finally:
+        db.close()
 
 @celery.task(name="tasks.engagement_execute")
 def engagement_execute():

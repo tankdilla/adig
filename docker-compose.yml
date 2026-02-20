@@ -40,6 +40,7 @@ services:
       CONTENT_INTEL_TASK: tasks.content_intel_daily
       BUILD_SHOOT_PACK_TASK: tasks.build_shoot_pack
       BUILD_BROLL_PACK_TASK: tasks.build_broll_pack
+      BUILD_ENGAGEMENT_QUEUE_TASK: tasks.build_engagement_queue
       LLM_PROVIDER: ollama
       OLLAMA_BASE_URL: http://ollama:11434
       PYTHONPATH: /app:/shared

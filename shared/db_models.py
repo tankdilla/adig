@@ -34,6 +34,18 @@ class QueueType(str, enum.Enum):
     outreach = "outreach"
     posting = "posting"
 
+class EngagementActionType(str, enum.Enum):
+    comment = "comment"
+    like = "like"
+    follow = "follow"
+
+class EngagementStatus(str, enum.Enum):
+    pending = "pending"      # generated/ready for review
+    approved = "approved"    # approved by admin
+    executed = "executed"    # manually completed (or executed by runner in the future)
+    skipped = "skipped"      # rejected/skipped
+    failed = "failed"        # generation failed / invalid target / other error
+
 class AppLog(Base):
     __tablename__ = "app_logs"
 
@@ -124,6 +136,47 @@ class EngagementQueueItem(Base):
     approved_by: Mapped[str] = mapped_column(String(120), nullable=True)
     approved_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+class EngagementAction(Base):
+    """
+    Next-gen engagement queue table (safe-by-design).
+    - Stores targets + generated copy
+    - Supports scheduling and “mark executed” workflow
+    - Avoids automation by default; human can copy/paste manually
+    """
+    __tablename__ = "engagement_actions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    platform: Mapped[str] = mapped_column(String(32), default="instagram", nullable=False)
+
+    # Target info (what you want to engage with)
+    target_url: Mapped[str] = mapped_column(Text, nullable=False)
+    target_handle: Mapped[str] = mapped_column(String(120), nullable=True)
+    target_caption: Mapped[str] = mapped_column(Text, nullable=True)
+
+    # Action
+    action_type: Mapped[EngagementActionType] = mapped_column(Enum(EngagementActionType), nullable=False)
+
+    # AI draft output (e.g., comment text)
+    proposed_text: Mapped[str] = mapped_column(Text, nullable=True)
+
+    # Workflow / scheduling
+    scheduled_for: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    status: Mapped[EngagementStatus] = mapped_column(Enum(EngagementStatus), default=EngagementStatus.pending, nullable=False)
+
+    approved_by: Mapped[str] = mapped_column(String(120), nullable=True)
+    approved_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
+    executed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    notes: Mapped[str] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        # Prevent duplicate engagement items for same url/action/platform
+        UniqueConstraint("platform", "action_type", "target_url", name="uq_engagement_actions_target"),
+    )
 
 class Creator(Base):
     __tablename__ = "creators"
