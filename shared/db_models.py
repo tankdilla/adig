@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 from sqlalchemy import (
-    Column, String, Text, DateTime, Integer, Boolean, Enum, ForeignKey, UniqueConstraint
+    Column, String, Text, DateTime, Integer, Boolean, Enum, ForeignKey, UniqueConstraint, Float
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship, DeclarativeBase
 from sqlalchemy.dialects.postgresql import JSONB
@@ -45,6 +45,29 @@ class EngagementStatus(str, enum.Enum):
     executed = "executed"    # manually completed (or executed by runner in the future)
     skipped = "skipped"      # rejected/skipped
     failed = "failed"        # generation failed / invalid target / other error
+
+class OutreachStatus(str, enum.Enum):
+    pending = "pending"        # generated, awaiting approval
+    approved = "approved"      # approved to send (manual)
+    sent = "sent"              # sent manually
+    replied = "replied"        # creator replied
+    booked = "booked"          # collab agreed
+    declined = "declined"      # declined explicitly
+    ghosted = "ghosted"        # no response after followups
+
+class CreatorRelationshipStatus(str, enum.Enum):
+    new = "new"
+    contacted = "contacted"
+    replied = "replied"
+    partnered = "partnered"
+    declined = "declined"
+    blocked = "blocked"
+
+class CreatorEdgeType(str, enum.Enum):
+    mention = "mention"                  # A mentioned B in bio/caption
+    co_mentioned = "co_mentioned"        # A and B mentioned together
+    similarity = "similarity"            # computed similarity (tags/content)
+    audience_overlap = "audience_overlap"# computed overlap score
 
 class AppLog(Base):
     __tablename__ = "app_logs"
@@ -185,23 +208,153 @@ class Creator(Base):
     handle: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
     platform: Mapped[str] = mapped_column(String(32), default="instagram", nullable=False)
     followers_est: Mapped[int] = mapped_column(Integer, nullable=True)
+    posts_count: Mapped[int] = mapped_column(Integer, nullable=True)
+    avg_engagement_rate: Mapped[float] = mapped_column(Float, nullable=True)
+    avg_like_count: Mapped[int] = mapped_column(Integer, nullable=True)
+    avg_comment_count: Mapped[int] = mapped_column(Integer, nullable=True)
+
+    is_brand: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_spam: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    fraud_score: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # 0-100
+    fraud_flags: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    last_scraped_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     niche_tags: Mapped[str] = mapped_column(Text, nullable=True)  # comma-separated
     notes: Mapped[str] = mapped_column(Text, nullable=True)
     score: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
-class OutreachDraft(Base):
-    __tablename__ = "outreach_drafts"
+
+class CreatorRelationship(Base):
+    """Tracks outreach relationship lifecycle to prevent re-contact spam."""
+    __tablename__ = "creator_relationships"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    creator_id: Mapped[int] = mapped_column(Integer, ForeignKey("creators.id"), nullable=False, unique=True)
+    creator: Mapped["Creator"] = relationship("Creator")
+
+    status: Mapped[CreatorRelationshipStatus] = mapped_column(
+        Enum(CreatorRelationshipStatus, name="creatorrelationshipstatus"),
+        default=CreatorRelationshipStatus.new,
+        nullable=False,
+    )
+
+    last_contacted_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    last_campaign_id: Mapped[int] = mapped_column(Integer, ForeignKey("outreach_campaigns.id"), nullable=True)
+    notes: Mapped[str] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class CreatorEdge(Base):
+    """Graph edges between creators to power similarity and "who to target next"."""
+    __tablename__ = "creator_edges"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source_creator_id: Mapped[int] = mapped_column(Integer, ForeignKey("creators.id"), nullable=False)
+    target_creator_id: Mapped[int] = mapped_column(Integer, ForeignKey("creators.id"), nullable=False)
+
+    edge_type: Mapped[CreatorEdgeType] = mapped_column(
+        Enum(CreatorEdgeType, name="creatoredgetype"),
+        nullable=False,
+    )
+    weight: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    # metadata: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    # edge_metadata: Mapped[dict] = mapped_column("metadata", JSONB, nullable=True)
+    edge_metadata: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("source_creator_id", "target_creator_id", "edge_type", name="uq_creator_edges"),
+    )
+
+
+class CreatorPost(Base):
+    """Lightweight creator post cache for pattern detection + fraud heuristics."""
+    __tablename__ = "creator_posts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     creator_id: Mapped[int] = mapped_column(Integer, ForeignKey("creators.id"), nullable=False)
     creator: Mapped["Creator"] = relationship("Creator")
 
+    platform: Mapped[str] = mapped_column(String(32), default="instagram", nullable=False)
+    post_url: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    post_type: Mapped[str] = mapped_column(String(32), default="reel", nullable=False)
+
+    caption: Mapped[str] = mapped_column(Text, nullable=True)
+    posted_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
+    metrics: Mapped[dict] = mapped_column(JSONB, nullable=True)     # likes/comments/views if available
+    extracted: Mapped[dict] = mapped_column(JSONB, nullable=True)   # hook/cta/audio/hashtags/etc
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class ViralPatternReport(Base):
+    __tablename__ = "viral_pattern_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    report_date: Mapped[str] = mapped_column(String(10), nullable=False)  # YYYY-MM-DD
+    scope: Mapped[str] = mapped_column(String(64), default="instagram", nullable=False)
+    report: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (UniqueConstraint("report_date", "scope", name="uq_viral_pattern_reports"),)
+
+class OutreachDraft(Base):
+    __tablename__ = "outreach_drafts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    creator_id: Mapped[int] = mapped_column(Integer, ForeignKey("creators.id"), nullable=False)
+    creator: Mapped["Creator"] = relationship("Creator")
+
     message: Mapped[str] = mapped_column(Text, nullable=False)
-    offer_type: Mapped[str] = mapped_column(String(64), nullable=True)  # gifted/affiliate/etc
+    offer_type: Mapped[str] = mapped_column(String(64), nullable=True)
     campaign_name: Mapped[str] = mapped_column(String(120), nullable=True)
 
+    # existing approval fields (keep these)
     status: Mapped[ApprovalStatus] = mapped_column(Enum(ApprovalStatus), default=ApprovalStatus.pending, nullable=False)
     approved_by: Mapped[str] = mapped_column(String(120), nullable=True)
     approved_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # NEW: outreach lifecycle tracking (manual execution)
+    outreach_status: Mapped["OutreachStatus"] = mapped_column(
+        Enum(OutreachStatus, name="outreachstatus"),
+        default=OutreachStatus.pending,
+        nullable=False,
+    )
+    campaign_id: Mapped[int] = mapped_column(Integer, ForeignKey("outreach_campaigns.id"), nullable=True)
+    campaign: Mapped["OutreachCampaign"] = relationship("OutreachCampaign")
+
+    send_channel: Mapped[str] = mapped_column(String(32), default="instagram_dm", nullable=False)
+    sent_by: Mapped[str] = mapped_column(String(120), nullable=True)
+    sent_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    thread_url: Mapped[str] = mapped_column(Text, nullable=True)  # optional link to convo
+
+    last_response_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    last_response_text: Mapped[str] = mapped_column(Text, nullable=True)
+
+    followups_sent: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+class OutreachCampaign(Base):
+    __tablename__ = "outreach_campaigns"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)  # "Week of 2026-02-24"
+    goal_outreaches: Mapped[int] = mapped_column(Integer, default=20, nullable=False)
+    goal_collabs: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
+    notes: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class OutreachEvent(Base):
+    __tablename__ = "outreach_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    outreach_draft_id: Mapped[int] = mapped_column(Integer, ForeignKey("outreach_drafts.id"), nullable=False)
+    outreach: Mapped["OutreachDraft"] = relationship("OutreachDraft")
+
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)  # "approved", "sent", "replied", etc.
+    note: Mapped[str] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)

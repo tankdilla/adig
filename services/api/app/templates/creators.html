@@ -1,0 +1,110 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Creators • H2N</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; max-width: 1100px; margin: 0 auto; }
+    a { color: inherit; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; margin: 12px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px; border-bottom: 1px solid #eee; text-align:left; vertical-align: top; }
+    th { font-size: 13px; color:#666; }
+    .pill { display:inline-block; padding:6px 10px; border-radius: 999px; background:#f2f2f2; font-size: 12px; }
+    button { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; background: white; cursor:pointer; }
+    input { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; }
+    .muted { color:#666; font-size: 14px; }
+    .row { display:flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div>
+      <h2>Creators</h2>
+      <div class="muted">Filtered: min_score={{ min_score }}, max_fraud={{ max_fraud }} • Total={{ total }}</div>
+    </div>
+    <div class="row">
+      <a href="/admin" class="pill">← Admin</a>
+      <a href="/admin/graph" class="pill">Graph</a>
+      <a href="/admin/patterns" class="pill">Patterns</a>
+      <form method="post" action="/logout">
+        <button type="submit">Logout</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Automation</h3>
+    <div class="row">
+      <form method="post" action="/admin/creators/discover">
+        <div class="muted">Discover (hashtags)</div>
+        <input name="limit" value="200" size="6" />
+        <input name="rotate" value="4" size="4" />
+        <button type="submit">Run Discovery</button>
+      </form>
+
+      <form method="post" action="/admin/creators/score">
+        <div class="muted">Score creators</div>
+        <input name="limit" value="200" size="6" />
+        <button type="submit">Run Scoring</button>
+      </form>
+
+      <form method="post" action="/admin/creators/graph">
+        <div class="muted">Build graph</div>
+        <input name="limit_creators" value="200" size="6" />
+        <input name="similarity_top_k" value="25" size="4" />
+        <button type="submit">Update Graph</button>
+      </form>
+    </div>
+    <p class="muted">These fire Celery jobs. Check <a href="/admin/logs">Logs</a> for progress.</p>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Handle</th>
+          <th>Score</th>
+          <th>Followers</th>
+          <th>Fraud</th>
+          <th>Tags</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in creators %}
+        <tr>
+          <td>
+            <div><b>@{{ c.handle }}</b></div>
+            <div class="muted"><a href="/admin/graph?handle={{ c.handle }}">View graph</a></div>
+          </td>
+          <td>{{ c.score }}</td>
+          <td>{{ c.followers_est or "—" }}</td>
+          <td>
+            <span class="pill">{{ c.fraud_score }}</span>
+            {% if c.is_brand %}<span class="pill">brand</span>{% endif %}
+            {% if c.is_spam %}<span class="pill">spam</span>{% endif %}
+          </td>
+          <td class="muted">{{ c.niche_tags or "" }}</td>
+          <td class="muted">{{ (c.notes or "")[:240] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="row" style="justify-content: space-between; margin-top: 10px;">
+      <div class="muted">Page {{ page }}</div>
+      <div class="row">
+        {% if page > 1 %}
+          <a class="pill" href="/admin/creators?page={{ page - 1 }}&min_score={{ min_score }}&max_fraud={{ max_fraud }}">Prev</a>
+        {% endif %}
+        {% if total > page * page_size %}
+          <a class="pill" href="/admin/creators?page={{ page + 1 }}&min_score={{ min_score }}&max_fraud={{ max_fraud }}">Next</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</body>
+</html>

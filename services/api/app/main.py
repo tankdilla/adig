@@ -5,7 +5,7 @@ from celery import Celery
 from fastapi import FastAPI, Depends, Header, HTTPException, Request, Form, status
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import and_
+from sqlalchemy import and_, or_    
 from sqlalchemy.orm import Session
 from datetime import datetime, date, time, timedelta
 
@@ -21,7 +21,13 @@ from db_models import (
     PostDraft,
     EngagementQueueItem,
     OutreachDraft,
+    OutreachCampaign,
+    OutreachEvent,
+    OutreachStatus,
     Creator,
+    CreatorEdge,
+    CreatorEdgeType,
+    ViralPatternReport,
     ApprovalStatus,
     ContentType,
     ActionMode,
@@ -72,6 +78,12 @@ CONTENT_INTEL_TASK = os.getenv("CONTENT_INTEL_TASK", "tasks.content_intel_daily"
 BUILD_SHOOT_PACK_TASK = os.getenv("BUILD_SHOOT_PACK_TASK", "tasks.build_shoot_pack")
 BUILD_BROLL_PACK_TASK = os.getenv("BUILD_BROLL_PACK_TASK", "tasks.build_broll_pack")
 BUILD_ENGAGEMENT_QUEUE_TASK = os.getenv("BUILD_ENGAGEMENT_QUEUE_TASK", "tasks.build_engagement_queue")
+BUILD_OUTREACH_BATCH_TASK = os.getenv("BUILD_OUTREACH_BATCH_TASK", "tasks.build_outreach_batch")
+BUILD_OUTREACH_FOLLOWUPS_TASK = os.getenv("BUILD_OUTREACH_FOLLOWUPS_TASK", "tasks.build_outreach_followups")
+SCORE_CREATORS_TASK = os.getenv("SCORE_CREATORS_TASK", "tasks.score_creators")
+CREATOR_DISCOVERY_TASK = os.getenv("CREATOR_DISCOVERY_TASK", "tasks.creator_discovery_hashtags")
+CREATOR_GRAPH_TASK = os.getenv("CREATOR_GRAPH_TASK", "tasks.creator_graph_update")
+VIRAL_PATTERNS_TASK = os.getenv("VIRAL_PATTERNS_TASK", "tasks.viral_patterns_daily")
 
 celery_client = Celery("h2n_api_client", broker=REDIS_URL, backend=REDIS_URL)
 
@@ -166,6 +178,142 @@ def admin_home(
         "settings": settings_map,
         "user": user,
     })
+
+
+# --- Creators (Discovery + Scoring + Graph) ---
+
+@app.get("/admin/creators", response_class=HTMLResponse)
+def admin_creators(
+    request: Request,
+    min_score: int = 50,
+    max_fraud: int = 70,
+    page: int = 1,
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    page = max(page, 1)
+    page_size = 200
+    offset = (page - 1) * page_size
+
+    query = (
+        db.query(Creator)
+        .filter(Creator.score >= min_score)
+        .filter(Creator.is_brand.is_(False))
+        .filter(Creator.is_spam.is_(False))
+        .filter(Creator.fraud_score < max_fraud)
+        .order_by(Creator.score.desc(), Creator.created_at.desc())
+    )
+    total = query.count()
+    creators = query.offset(offset).limit(page_size).all()
+
+    return templates.TemplateResponse(
+        "creators.html",
+        {
+            "request": request,
+            "user": user,
+            "creators": creators,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "min_score": min_score,
+            "max_fraud": max_fraud,
+        },
+    )
+
+
+@app.post("/admin/creators/discover")
+def admin_creators_discover(
+    request: Request,
+    limit: int = Form(200),
+    rotate: int = Form(4),
+    user: str = Depends(require_admin),
+):
+    # Fire and forget celery task
+    celery_client.send_task(CREATOR_DISCOVERY_TASK, kwargs={"limit": int(limit), "rotate": int(rotate)})
+    return RedirectResponse(url="/admin/creators", status_code=303)
+
+
+@app.post("/admin/creators/score")
+def admin_creators_score(
+    request: Request,
+    limit: int = Form(200),
+    user: str = Depends(require_admin),
+):
+    celery_client.send_task(SCORE_CREATORS_TASK, kwargs={"limit": int(limit)})
+    return RedirectResponse(url="/admin/creators", status_code=303)
+
+
+@app.post("/admin/creators/graph")
+def admin_creators_graph(
+    request: Request,
+    limit_creators: int = Form(200),
+    similarity_top_k: int = Form(25),
+    user: str = Depends(require_admin),
+):
+    celery_client.send_task(
+        CREATOR_GRAPH_TASK,
+        kwargs={"limit_creators": int(limit_creators), "similarity_top_k": int(similarity_top_k)},
+    )
+    return RedirectResponse(url="/admin/creators", status_code=303)
+
+
+@app.get("/admin/graph", response_class=HTMLResponse)
+def admin_graph(
+    request: Request,
+    handle: str | None = None,
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    creator = None
+    neighbors = []
+
+    if handle:
+        h = handle.lstrip("@").strip().lower()
+        creator = db.query(Creator).filter(Creator.handle == h).first()
+        if creator:
+            edges = (
+                db.query(CreatorEdge)
+                .filter(CreatorEdge.source_creator_id == creator.id)
+                .order_by(CreatorEdge.weight.desc())
+                .limit(75)
+                .all()
+            )
+            # Load neighbor creators
+            ids = [e.target_creator_id for e in edges]
+            by_id = {c.id: c for c in db.query(Creator).filter(Creator.id.in_(ids)).all()} if ids else {}
+            for e in edges:
+                neighbors.append({
+                    "edge": e,
+                    "creator": by_id.get(e.target_creator_id),
+                })
+
+    return templates.TemplateResponse(
+        "graph.html",
+        {"request": request, "user": user, "handle": handle or "", "creator": creator, "neighbors": neighbors},
+    )
+
+
+@app.get("/admin/patterns", response_class=HTMLResponse)
+def admin_patterns(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    latest = db.query(ViralPatternReport).order_by(ViralPatternReport.id.desc()).first()
+    return templates.TemplateResponse(
+        "patterns.html",
+        {"request": request, "user": user, "latest": latest},
+    )
+
+
+@app.post("/admin/patterns/run")
+def admin_patterns_run(
+    request: Request,
+    limit_posts: int = Form(500),
+    user: str = Depends(require_admin),
+):
+    celery_client.send_task(VIRAL_PATTERNS_TASK, kwargs={"limit_posts": int(limit_posts)})
+    return RedirectResponse(url="/admin/patterns", status_code=303)
 
 # --- Admin Logs ---
 
@@ -383,27 +531,261 @@ def mark_engagement_executed(
 
 # --- Admin UI: Outreach ---
 
+### List/review drafts
 @app.get("/admin/outreach", response_class=HTMLResponse)
 def admin_outreach(
     request: Request,
-    status: ApprovalStatus = ApprovalStatus.pending,
+    campaign_id: int | None = None,
+    view: str = "pending",
     db: Session = Depends(get_db),
     user: str = Depends(require_admin),
 ):
-    items = (
-        db.query(OutreachDraft)
-        .filter(OutreachDraft.status == status)
-        .order_by(OutreachDraft.created_at.desc())
-        .limit(300)
-        .all()
-    )
-    return templates.TemplateResponse("outreach.html", {
-        "request": request,
-        "user": user,
-        "status": status.value,
-        "items": items,
-    })
+    campaigns = db.query(OutreachCampaign).order_by(OutreachCampaign.created_at.desc()).limit(50).all()
 
+    q = db.query(OutreachDraft)
+    if campaign_id:
+        q = q.filter(OutreachDraft.campaign_id == campaign_id)
+
+    if view == "pending":
+        q = q.filter(OutreachDraft.status == ApprovalStatus.pending)
+    elif view == "approved":
+        q = q.filter(OutreachDraft.status == ApprovalStatus.approved)
+    elif view == "sent":
+        q = q.filter(OutreachDraft.outreach_status == OutreachStatus.sent)
+    elif view == "replied":
+        q = q.filter(OutreachDraft.outreach_status == OutreachStatus.replied)
+    elif view == "booked":
+        q = q.filter(OutreachDraft.outreach_status == OutreachStatus.booked)
+
+    drafts = q.order_by(OutreachDraft.created_at.desc()).limit(200).all()
+
+    draft_ids = [d.id for d in drafts]
+    events = []
+    if draft_ids:
+        events = (
+            db.query(OutreachEvent)
+            .filter(OutreachEvent.outreach_draft_id.in_(draft_ids))
+            .filter(OutreachEvent.event_type == "followup_generated")
+            .order_by(OutreachEvent.created_at.desc())
+            .all()
+        )
+
+    latest_followup = {}
+    for e in events:
+        if e.outreach_draft_id not in latest_followup:
+            latest_followup[e.outreach_draft_id] = e.note
+
+    return templates.TemplateResponse(
+        "outreach.html",
+        {
+            "request": request,
+            "user": user,
+            "campaigns": campaigns,
+            "campaign_id": campaign_id,
+            "view": view,
+            "drafts": drafts,
+            "latest_followup": latest_followup,
+        },
+    )
+
+### Create outreach campaign
+@app.post("/admin/outreach/campaigns")
+def create_outreach_campaign(
+    name: str = Form(...),
+    goal_outreaches: int = Form(20),
+    goal_collabs: int = Form(5),
+    notes: str = Form(None),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    c = OutreachCampaign(
+        name=name,
+        goal_outreaches=goal_outreaches,
+        goal_collabs=goal_collabs,
+        notes=notes,
+        created_at=datetime.utcnow(),
+    )
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+    return RedirectResponse(url=f"/admin/outreach?campaign_id={c.id}", status_code=303)
+
+### Generate outreach drafts
+@app.post("/admin/outreach/generate")
+def admin_outreach_generate(
+    campaign_id: int = Form(...),
+    limit: int = Form(20),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    celery_client.send_task(BUILD_OUTREACH_BATCH_TASK, args=[campaign_id], kwargs={"limit": limit})
+    return RedirectResponse(url=f"/admin/outreach?campaign_id={campaign_id}", status_code=303)
+
+### Export outreach csv
+@app.get("/admin/outreach/export.csv")
+def export_outreach_csv(
+    request: Request,
+    campaign_id: int | None = None,
+    view: str = "approved",  # approved/sent/replied/booked/all
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    q = db.query(OutreachDraft).join(Creator, OutreachDraft.creator_id == Creator.id)
+
+    if campaign_id:
+        q = q.filter(OutreachDraft.campaign_id == campaign_id)
+
+    if view == "approved":
+        q = q.filter(OutreachDraft.status == ApprovalStatus.approved).filter(OutreachDraft.outreach_status == OutreachStatus.approved)
+    elif view == "sent":
+        q = q.filter(OutreachDraft.outreach_status == OutreachStatus.sent)
+    elif view == "replied":
+        q = q.filter(OutreachDraft.outreach_status == OutreachStatus.replied)
+    elif view == "booked":
+        q = q.filter(OutreachDraft.outreach_status == OutreachStatus.booked)
+    elif view == "pending":
+        q = q.filter(OutreachDraft.status == ApprovalStatus.pending)
+
+    rows = q.order_by(OutreachDraft.created_at.desc()).limit(2000).all()
+
+    # CSV
+    import csv
+    from io import StringIO
+
+    buf = StringIO()
+    w = csv.writer(buf)
+    w.writerow([
+        "draft_id", "creator_handle", "platform", "campaign", "approval_status",
+        "outreach_status", "message", "sent_at", "thread_url", "last_response_at", "last_response_text"
+    ])
+
+    for d in rows:
+        handle = d.creator.handle if d.creator else ""
+        platform = d.creator.platform if d.creator else "instagram"
+        w.writerow([
+            d.id,
+            handle,
+            platform,
+            d.campaign_name or "",
+            d.status.value,
+            d.outreach_status.value if d.outreach_status else "",
+            (d.message or "").replace("\n", " ").strip(),
+            d.sent_at.isoformat() if d.sent_at else "",
+            d.thread_url or "",
+            d.last_response_at.isoformat() if d.last_response_at else "",
+            (d.last_response_text or "").replace("\n", " ").strip(),
+        ])
+
+    csv_text = buf.getvalue()
+    filename = f"outreach_{(campaign_id or 'all')}_{view}.csv"
+
+    return PlainTextResponse(
+        csv_text,
+        headers={
+            "Content-Type": "text/csv; charset=utf-8",
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
+
+### Generate outreach followups
+@app.post("/admin/outreach/followups")
+def admin_generate_followups(
+    campaign_id: int = Form(None),
+    days: int = Form(3),
+    limit: int = Form(25),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    celery_client.send_task(
+        BUILD_OUTREACH_FOLLOWUPS_TASK,
+        args=[],
+        kwargs={"campaign_id": campaign_id, "days": days, "limit": limit},
+    )
+    if campaign_id:
+        return RedirectResponse(url=f"/admin/outreach?campaign_id={campaign_id}&view=sent", status_code=303)
+    return RedirectResponse(url="/admin/outreach?view=sent", status_code=303)
+
+### Approve outreach
+@app.post("/outreach/{draft_id}/approve")
+def approve_outreach(
+    draft_id: int,
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    d = db.query(OutreachDraft).filter(OutreachDraft.id == draft_id).first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    d.status = ApprovalStatus.approved
+    d.approved_by = user
+    d.approved_at = datetime.utcnow()
+    d.outreach_status = OutreachStatus.approved
+    db.add(d)
+    db.flush()
+    db.add(OutreachEvent(outreach_draft_id=d.id, event_type="approved", note=None, created_at=datetime.utcnow()))
+    db.commit()
+    return RedirectResponse(url="/admin/outreach?view=pending", status_code=303)
+
+### Mark outreach sent
+@app.post("/outreach/{draft_id}/sent")
+def mark_outreach_sent(
+    draft_id: int,
+    sent_by: str = Form(None),
+    thread_url: str = Form(None),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    d = db.query(OutreachDraft).filter(OutreachDraft.id == draft_id).first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    d.outreach_status = OutreachStatus.sent
+    d.sent_at = datetime.utcnow()
+    d.sent_by = sent_by or user
+    if thread_url:
+        d.thread_url = thread_url
+
+    db.add(d)
+    db.flush()
+    db.add(OutreachEvent(outreach_draft_id=d.id, event_type="sent", note=thread_url, created_at=datetime.utcnow()))
+    db.commit()
+    return RedirectResponse(url="/admin/outreach?view=approved", status_code=303)
+
+### Record outreach response
+@app.post("/outreach/{draft_id}/response")
+def record_outreach_response(
+    draft_id: int,
+    status: str = Form(...),   # replied/booked/declined/ghosted
+    response_text: str = Form(None),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    d = db.query(OutreachDraft).filter(OutreachDraft.id == draft_id).first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    d.last_response_at = datetime.utcnow()
+    d.last_response_text = response_text
+    try:
+        d.outreach_status = OutreachStatus(status)
+    except Exception:
+        d.outreach_status = OutreachStatus.replied
+
+    db.add(d)
+    db.flush()
+    db.add(OutreachEvent(outreach_draft_id=d.id, event_type=f"response:{d.outreach_status.value}", note=response_text, created_at=datetime.utcnow()))
+    db.commit()
+    return RedirectResponse(url="/admin/outreach?view=sent", status_code=303)
+
+### Score creators
+@app.post("/admin/creators/score")
+def admin_score_creators(
+    limit: int = Form(200),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    celery_client.send_task(SCORE_CREATORS_TASK, args=[], kwargs={"limit": limit})
+    return RedirectResponse(url="/admin?msg=Scoring+creators...+refresh+in+30-90+seconds", status_code=303)
 # --- Admin UI: Generate Today (celery task) ---
 
 @app.post("/admin/generate-today")
@@ -672,17 +1054,6 @@ def admin_queue(
         },
     )
 
-### Helper
-# def _shoot_pack_obj(p):
-#     if not p.shoot_pack:
-#         return None
-#     try:
-#         return json.loads(p.shoot_pack)
-#     except Exception:
-#         return {"_raw": p.shoot_pack, "_error": "Invalid JSON"}
-
-### Trigger shoot pack
-
 @app.post("/posts/{post_id}/shoot-pack")
 def trigger_shoot_pack(
     post_id: int,
@@ -831,28 +1202,3 @@ def list_outreach_queue(
         "status": o.status.value,
         "created_at": o.created_at,
     } for o in items]
-
-@app.post("/outreach/{draft_id}/approve")
-def approve_outreach(
-    request: Request,
-    draft_id: int,
-    approved: bool = Form(...),
-    by: str = Form("Mary/Darrell"),
-    db: Session = Depends(get_db),
-    user: str = Depends(require_admin),
-):
-    o = db.get(OutreachDraft, draft_id)
-    if not o:
-        raise HTTPException(404, "Not found")
-
-    if approved:
-        o.status = ApprovalStatus.approved
-        o.approved_by = by or user
-        o.approved_at = now_utc()
-    else:
-        o.status = ApprovalStatus.rejected
-
-    db.add(o)
-    db.commit()
-
-    return RedirectResponse(url="/admin/outreach", status_code=303)

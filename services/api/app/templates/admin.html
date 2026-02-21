@@ -48,6 +48,15 @@
   </div>
 
   <div class="card">
+    <h3>Score Creators</h3>
+    <form method="post" action="/admin/creators/score">
+      <input name="limit" type="number" value="200" />
+      <button type="submit">Score Creators ⭐</button>
+    </form>
+
+  </div>
+
+  <div class="card">
     <h3>Safety</h3>
     <p class="muted">Default should stay safe: Kill switch ON + Action mode REVIEW.</p>
 
@@ -76,6 +85,9 @@
   <div class="card">
     <h3>Quick Links (API)</h3>
     <ul>
+      <li><a href="/admin/creators">/admin/creators</a></li>
+      <li><a href="/admin/graph">/admin/graph</a></li>
+      <li><a href="/admin/patterns">/admin/patterns</a></li>
       <li><a href="/plan/today">/plan/today</a></li>
       <li><a href="/posts/drafts">/posts/drafts</a></li>
       <li><a href="/engagement/queue">/engagement/queue</a></li>

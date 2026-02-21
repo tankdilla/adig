@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Patterns • H2N</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; max-width: 980px; margin: 0 auto; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; margin: 12px 0; }
+    .row { display:flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+    .pill { display:inline-block; padding:6px 10px; border-radius: 999px; background:#f2f2f2; font-size: 12px; }
+    button { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; background: white; cursor:pointer; }
+    input { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; }
+    .muted { color:#666; font-size: 14px; }
+    pre { white-space: pre-wrap; word-break: break-word; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div>
+      <h2>Viral Patterns (MVP)</h2>
+      <div class="muted">Built from cached creator_posts.extracted fields.</div>
+    </div>
+    <div class="row">
+      <a href="/admin/creators" class="pill">← Creators</a>
+      <a href="/admin" class="pill">Admin</a>
+      <form method="post" action="/logout">
+        <button type="submit">Logout</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <form method="post" action="/admin/patterns/run" class="row">
+      <div>
+        <div class="muted">Limit posts</div>
+        <input name="limit_posts" value="500" size="6" />
+      </div>
+      <button type="submit">Run</button>
+    </form>
+    <p class="muted">Check <a href="/admin/logs">Logs</a> for progress.</p>
+  </div>
+
+  <div class="card">
+    {% if latest %}
+      <div class="row">
+        <span class="pill">{{ latest.report_date }}</span>
+        <span class="pill">{{ latest.scope }}</span>
+      </div>
+      <pre>{{ latest.report | tojson(indent=2) }}</pre>
+    {% else %}
+      <p class="muted">No reports yet. Run the job above.</p>
+    {% endif %}
+  </div>
+</body>
+</html>

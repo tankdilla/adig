@@ -5,76 +5,146 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Outreach — H2N</title>
   <style>
-    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; max-width: 920px; margin: 0 auto; }
-    .top { display:flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; max-width: 980px; margin: 0 auto; }
     .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; margin: 12px 0; }
+    .row { display:flex; gap: 10px; flex-wrap: wrap; align-items:center; justify-content: space-between; }
     .muted { color: #666; font-size: 14px; white-space: pre-wrap; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; white-space: pre-wrap; }
-    button { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; background: white; }
-    .row { display:flex; gap: 10px; flex-wrap: wrap; align-items:center; }
     .pill { display:inline-block; padding:6px 10px; border-radius: 999px; background:#f2f2f2; }
-    .actions { display:flex; gap: 10px; flex-wrap: wrap; }
+    button { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; background: white; cursor:pointer; }
+    textarea, input, select { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; }
+    .actions { display:flex; gap: 10px; flex-wrap: wrap; align-items:center; }
+    .danger { border-color:#c00; }
   </style>
 </head>
 <body>
-  <div class="top">
+  <div class="row" style="margin-bottom: 10px;">
     <div>
-      <h2>Outreach Draft Approvals</h2>
+      <h2>Influencer Outreach</h2>
       <div class="muted">Signed in as <b>{{ user }}</b></div>
     </div>
-    <div class="row">
+    <div class="actions">
       <a href="/admin"><button type="button">Home</button></a>
-      <a href="/admin/outreach?status=pending"><button type="button">Pending</button></a>
-      <a href="/admin/outreach?status=approved"><button type="button">Approved</button></a>
-      <a href="/admin/outreach?status=rejected"><button type="button">Rejected</button></a>
+      <a href="/admin/posts?view=pending"><button type="button">Approvals</button></a>
+      <a href="/admin/engagement"><button type="button">Engagement</button></a>
     </div>
   </div>
 
-  <p class="pill">Showing: {{ status }}</p>
+  <div class="card">
+    <h3>Campaigns</h3>
+    <form method="post" action="/admin/outreach/campaigns" class="actions">
+      <input name="name" placeholder="Campaign name (e.g., Week of 2026-02-24)" required />
+      <input name="goal_outreaches" type="number" value="20" style="max-width:120px;" />
+      <input name="goal_collabs" type="number" value="5" style="max-width:120px;" />
+      <button type="submit">Create</button>
+    </form>
 
-  {% if not items %}
+    <div class="muted" style="margin-top:10px;">Select campaign:</div>
+    <div class="actions">
+      {% for c in campaigns %}
+        <a href="/admin/outreach?campaign_id={{ c.id }}"><button type="button">{{ c.name }}</button></a>
+      {% endfor %}
+    </div>
+
+    {% if campaign_id %}
+      <hr style="margin:12px 0; border:0; border-top:1px solid #eee;" />
+      <form method="post" action="/admin/outreach/generate" class="actions">
+        <input type="hidden" name="campaign_id" value="{{ campaign_id }}" />
+        <input name="limit" type="number" value="20" style="max-width:120px;" />
+        <button type="submit">Generate drafts for this campaign ✅</button>
+      </form>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="actions">
+      <a href="/admin/outreach?campaign_id={{ campaign_id }}&view=pending">Pending</a>
+      <a href="/admin/outreach?campaign_id={{ campaign_id }}&view=approved">Approved</a>
+      <a href="/admin/outreach?campaign_id={{ campaign_id }}&view=sent">Sent</a>
+      <a href="/admin/outreach?campaign_id={{ campaign_id }}&view=replied">Replied</a>
+      <a href="/admin/outreach?campaign_id={{ campaign_id }}&view=booked">Booked</a>
+      <span class="pill">View: {{ view }}</span>
+    </div>
+  </div>
+
+  {% if not drafts %}
     <div class="card">
-      <b>No items.</b>
-      <div class="muted">When the influencer agent runs, outreach drafts show up here.</div:>
+      <b>No drafts.</b>
+      <div class="muted">Generate a batch for a campaign to see drafts here.</div>
     </div>
   {% endif %}
 
-  {% for o in items %}
+  {% for d in drafts %}
     <div class="card">
       <div class="row">
-        {% if o.creator and o.creator.handle %}
-          <span class="pill">@{{ o.creator.handle }}</span>
-        {% endif %}
-        {% if o.offer_type %}<span class="pill">{{ o.offer_type }}</span>{% endif %}
-        {% if o.campaign_name %}<span class="pill">{{ o.campaign_name }}</span>{% endif %}
-        <span class="muted">Created: {{ o.created_at }}</span>
+        <div>
+          <span class="pill">@{{ d.creator.handle }}</span>
+          <span class="pill">{{ d.outreach_status.value }}</span>
+          <span class="pill">{{ d.status.value }}</span>
+        </div>
+        <div class="muted">Created: {{ d.created_at }}</div>
       </div>
 
-      <div class="muted"><b>Message</b></div>
-      <div class="mono">{{ o.message }}</div>
+      <div class="muted" style="margin-top:10px;"><b>Message</b></div>
+      <div class="mono" id="msg-{{ d.id }}">{{ d.message }}</div>
 
-      {% if status == "pending" %}
-        <hr/>
-        <div class="actions">
-          <form method="post" action="/outreach/{{ o.id }}/approve">
-            <input type="hidden" name="approved" value="true" />
-            <input type="hidden" name="by" value="{{ user }}" />
+      <div class="actions" style="margin-top:10px;">
+        <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('msg-{{ d.id }}').innerText)">Copy 📋</button>
+
+        {% if d.status.value == "pending" %}
+          <form method="post" action="/outreach/{{ d.id }}/approve">
             <button type="submit">Approve ✅</button>
           </form>
+        {% endif %}
 
-          <form method="post" action="/outreach/{{ o.id }}/approve">
-            <input type="hidden" name="approved" value="false" />
-            <input type="hidden" name="by" value="{{ user }}" />
-            <button type="submit" style="border-color:#c00;">Reject ❌</button>
+        {% if d.outreach_status.value == "approved" %}
+          <form method="post" action="/outreach/{{ d.id }}/sent" class="actions">
+            <input name="thread_url" placeholder="Thread URL (optional)" style="min-width:280px;" />
+            <button type="submit">Mark Sent ✅</button>
           </form>
-        </div>
-      {% else %}
-        <div class="muted" style="margin-top:10px;">
-          Status: <b>{{ o.status.value }}</b>
-          {% if o.approved_by %} — by {{ o.approved_by }}{% endif %}
-        </div>
+        {% endif %}
+      </div>
+
+      {% if d.outreach_status.value == "sent" %}
+        <hr style="margin:12px 0; border:0; border-top:1px solid #eee;" />
+        <form method="post" action="/outreach/{{ d.id }}/response" class="actions">
+          <select name="status">
+            <option value="replied">Replied</option>
+            <option value="booked">Booked</option>
+            <option value="declined">Declined</option>
+            <option value="ghosted">Ghosted</option>
+          </select>
+          <input name="response_text" placeholder="Response notes (optional)" style="min-width:360px;" />
+          <button type="submit">Save Response</button>
+        </form>
+      {% endif %}
+
+      {% if d.last_response_text %}
+        <div class="muted" style="margin-top:10px;"><b>Last response</b></div>
+        <div class="muted">{{ d.last_response_text }}</div>
+      {% endif %}
+
+      {% set fu = latest_followup.get(d.id) %}
+      {% if fu %}
+        <div class="muted" style="margin-top:10px;"><b>Latest follow-up (copy/paste)</b></div>
+        <div class="mono" id="fu-{{ d.id }}">{{ fu }}</div>
+        <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('fu-{{ d.id }}').innerText)">
+          Copy Follow-up 📋
+        </button>
       {% endif %}
     </div>
   {% endfor %}
+
+  <a href="/admin/outreach/export.csv?campaign_id={{ campaign_id }}&view={{ view }}">
+    <button type="button">Export CSV 📤</button>
+  </a>
+
+  <form method="post" action="/admin/outreach/followups" class="actions">
+    <input type="hidden" name="campaign_id" value="{{ campaign_id }}" />
+    <input name="days" type="number" value="3" style="max-width:90px;" />
+    <input name="limit" type="number" value="25" style="max-width:90px;" />
+    <button type="submit">Generate Follow-ups 🔁</button>
+  </form>
+
 </body>
 </html>

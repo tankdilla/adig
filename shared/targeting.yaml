@@ -1,0 +1,67 @@
+# Targeting configuration for creator discovery
+
+instagram:
+  # Core niches aligned with Hello To Natural product ecosystem (body care + wellness rituals)
+  target_niches:
+    - natural skincare
+    - body butter
+    - shea butter
+    - mango butter
+    - body oil
+    - self care routines
+    - herbal tea
+    - holistic wellness
+    - plant based lifestyle
+    - PCOS support
+    - blood sugar friendly
+    - faith based wellness
+    - black owned brands
+    - Mississippi wellness
+    - southern wellness
+
+  # Hashtags we can use as discovery seeds (keep it safe; rotate and don’t over-hit any one tag)
+  seed_hashtags:
+    - naturalskincare
+    - bodybutter
+    - sheabutter
+    - mangobutter
+    - bodyoil
+    - selfcare
+    - herbaltea
+    - holistichealth
+    - blackownedbusiness
+    - blackgirlwellness
+    - plantbased
+    - pcos
+    - diabeteats
+    - faithandwellness
+    - mississippi
+
+  # Exclude list: brands, mega accounts, spam pages
+  exclude:
+    # likely brands/shops
+    handle_contains:
+      - shop
+      - store
+      - boutique
+      - official
+      - brand
+      - skincareline
+      - cosmetics
+      - warehouse
+      - dropship
+
+    # spam keywords often found in bios/captions
+    text_contains:
+      - dm for promo
+      - paid promo
+      - forex
+      - crypto
+      - nft
+      - whatsapp
+      - telegram
+      - giveaway page
+      - shoutout
+
+    # exclude mega accounts by follower count (default)
+    mega_followers_threshold: 250000

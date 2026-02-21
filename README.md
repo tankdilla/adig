@@ -1,276 +1,421 @@
-# Hello To Natural — AI Content Engine
+# Hello To Natural AI Growth Engine
 
-An AI-driven content intelligence and automation system designed to grow **Hello To Natural’s Instagram presence from 18K to 36K followers** using structured trend ingestion, local LLM ideation, and reviewable draft pipelines.
+AI-powered Instagram growth, creator discovery, and outreach automation for **Hello To Natural (H2N)**.
 
-This system runs locally on Apple Silicon (M3, 16GB RAM) using Docker, Celery, PostgreSQL, Redis, Playwright, and Ollama.
+This system is designed to safely automate the parts of marketing that machines are good at while keeping **human approval for anything public-facing**.
 
----
+The goal is to scale:
 
-## Overview
+• Instagram growth
+• influencer partnerships
+• community engagement
+• content insights
 
-The Hello To Natural AI Content Engine:
-
-* Scrapes non-Instagram trend sources (Google Trends RSS, YouTube, Reddit, etc.)
-* Synthesizes trend signals
-* Generates structured Reel ideas via a local LLM (Ollama)
-* Stores reviewable drafts in Postgres
-* Allows on-demand generation from an admin interface
-* Runs fully containerized
-
-It is built for:
-
-* Sustainable, compliant growth
-* Human-in-the-loop review
-* Local-first privacy
-* Modular expansion
+without using spammy automation or violating platform trust.
 
 ---
 
-## Architecture
+# System Overview
 
-```
-                    ┌──────────────────────┐
-                    │     FastAPI API      │
-                    │   Admin Interface    │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │      Redis Queue     │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │     Celery Worker    │
-                    │  Content Pipeline    │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-        ┌───────────────┬───────────────┬────────────────┐
-        │  Playwright   │   RSS Parser  │  LLM (Ollama)  │
-        │  Scraping     │   Signals     │  Idea Generator│
-        └───────────────┴───────────────┴────────────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │      PostgreSQL      │
-                    │ post_drafts          │
-                    │ daily_plans          │
-                    └──────────────────────┘
-```
+The platform runs a set of AI agents and supporting services.
+
+Core idea:
+
+Agents **think automatically**, but **actions require approval**.
+
+Pipeline:
+
+Discovery → Scoring → Insights → Drafts → Human Approval → Execution
 
 ---
 
-## Core Features
+# High Level Architecture
 
-### 1. Content Intel Pipeline
+Docker containers run the system.
 
-* Google Trends RSS ingestion
-* Trend signal parsing
-* Structured signal normalization
-* Resilient error handling
-* JSON-safe idea generation
+Services include:
 
-### 2. LLM-Powered Ideation
-
-* Local inference via Ollama
-* Structured JSON output enforcement
-* Self-repair JSON validation
-* Brand-aligned system prompt
-* Fast vs. thoughtful model separation
-
-### 3. Admin UI
-
-* Manual “Generate Today’s Ideas” button
-* Review drafts before publishing
-* View daily content plan
-* Rate-limit generation to prevent abuse
-
-### 4. Database Models
-
-* `post_drafts`
-* `daily_plans`
-* `settings`
+API – FastAPI control plane and admin dashboard
+Worker – Celery workers running AI agents
+Scheduler – Celery Beat scheduled jobs
+Database – Postgres storing creators, drafts, metrics
+Redis – message broker and rate-limit store
+Ollama – optional local LLM inference
 
 ---
 
-## Tech Stack
-
-| Layer         | Technology           |
-| ------------- | -------------------- |
-| API           | FastAPI              |
-| Worker        | Celery               |
-| Broker        | Redis                |
-| Database      | PostgreSQL           |
-| LLM           | Ollama (llama3.1:8b) |
-| Scraping      | Playwright           |
-| Parsing       | XML + BeautifulSoup  |
-| Orchestration | Docker Compose       |
-
----
-
-## Running Locally
-
-### 1. Start Services
-
-```bash
-docker compose up -d --build
-```
-
-### 2. Access Admin
+# Directory Layout
 
 ```
-http://localhost:8000/admin
-```
-
-### 3. Generate Ideas
-
-Click **Generate Today’s Ideas**
-
-### 4. Inspect Database
-
-```bash
-docker compose exec db psql -U h2n -d h2n
+h2n-agents
+│
+├── docker-compose.yml
+├── .env
+│
+├── services
+│   ├── api
+│   │   ├── Dockerfile
+│   │   └── app
+│   │       ├── main.py
+│   │       ├── db.py
+│   │       ├── settings.py
+│   │       ├── templates
+│   │       └── alembic
+│   │
+│   ├── worker
+│   │   ├── Dockerfile
+│   │   └── app
+│   │       ├── celery_app.py
+│   │       ├── tasks.py
+│   │       └── agents
+│   │
+│   └── scheduler
+│
+├── shared
+│   ├── db_models.py
+│   └── targeting.yaml
+│
+└── scripts
 ```
 
 ---
 
-## Environment Variables
+# Core AI Agents
+
+## Content Intelligence Agent
+
+Determines what content should be posted.
+
+Analyzes:
+
+• trending reels
+• competitor accounts
+• past H2N performance
+• seasonal wellness topics
+
+Outputs:
+
+• reel ideas
+• caption drafts
+• posting schedule
+
+---
+
+# Creator Discovery Agent
+
+Discovers potential collaborators.
+
+Sources:
+
+• Instagram hashtag pages
+• manual imports
+• similar creator graph
+
+Focus niches:
+
+• natural skincare
+• shea butter / body oils
+• herbal wellness
+• plant-based lifestyle
+• Black women wellness
+• Christian / faith-based living
+• natural hair community
+
+---
+
+# Creator Scoring System
+
+Creators receive a score from 0 to 100.
+
+Factors include:
+
+Audience size
+Niche alignment
+Engagement signals
+Authenticity
+Brand safety
+Fraud signals
+
+Sweet spot:
+
+5k – 80k followers
+
+Creators above 250k are skipped.
+
+---
+
+# Fraud Detection
+
+The system attempts to filter low-quality creators.
+
+Signals include:
+
+Low engagement relative to follower count
+Very few posts
+Spam keywords in profile
+Bot-like behavior
+
+Fraud reduces score or excludes the creator entirely.
+
+---
+
+# Creator Graph
+
+The platform builds a graph of relationships between creators.
+
+Edges represent:
+
+Similarity
+Audience overlap
+Mentions
+Collaborations
+
+This enables:
+
+Finding creators similar to successful partners
+Avoiding overlapping audiences
+Discovering rising creators early
+
+---
+
+# Outreach Automation
+
+The system generates collaboration drafts.
+
+Each outreach message is personalized using:
+
+Creator niche
+Recent content
+Campaign context
+
+Example message:
+
+Hello {creator},
+
+I really love your content around natural wellness.
+We run Hello To Natural, a plant-based body care brand focused on rituals and holistic living.
+
+We would love to send you something and collaborate if it feels aligned.
+
+No pressure at all.
+
+Mary & Darrell
+Hello To Natural
+
+---
+
+# Safety System
+
+The platform is intentionally conservative.
+
+Two main protections:
+
+Kill Switch
+Action Mode
+
+Kill switch blocks all automated actions.
+
+Action modes:
+
+review – generate drafts only
+manual – export actions for manual use
+live – execute approved tasks
+
+Defaults are safe.
+
+---
+
+# Environment Variables
+
+Example `.env`
 
 ```
-DATABASE_URL=postgresql+psycopg://h2n:h2n_password@db:5432/h2n
+POSTGRES_DB=h2n
+POSTGRES_USER=h2n
+POSTGRES_PASSWORD=change_me
+
 REDIS_URL=redis://redis:6379/0
-OLLAMA_BASE_URL=http://ollama:11434
-OLLAMA_MODEL=llama3.1:8b
-OLLAMA_MODEL_FAST=llama3.1:8b
-TREND_SOURCES_PATH=/app/shared/trend_sources.yaml
+
+ADMIN_TOKEN=your_secure_token
+
+ACTION_MODE=review
+KILL_SWITCH=true
+
+MAX_ACTIONS_PER_HOUR=30
+MAX_DMS_PER_DAY=20
+MAX_COMMENTS_PER_DAY=40
 ```
 
 ---
 
-# Roadmap
+# Running the System
 
-The system is intentionally modular. Below is the planned evolution.
+Build containers:
 
----
+```
+docker compose up --build
+```
 
-## Phase 1 — Stability & Reliability (Next)
+Run migrations:
 
-* [✅] Add structured logging
-* [ ] Add pipeline health dashboard in admin
-* [ ] Show last run time + idea count
-* [ ] Model availability check at startup
-* [ ] Per-source success/failure reporting
-* [ ] Improve prompt reliability for strict JSON
+```
+docker compose exec api alembic upgrade head
+```
 
----
+Open admin dashboard:
 
-## Phase 2 — Growth Acceleration Engine
-
-* [ ] Auto-caption A/B variants
-* [ ] Hook optimization scoring
-* [ ] Engagement probability scoring model
-* [ ] Reel format templates (educational, testimonial, product, storytime)
-* [ ] Hashtag intelligence weighting
-* [ ] Weekly content calendar auto-builder
-* [ ] Topic clustering to avoid repetition
+```
+http://localhost:8000
+```
 
 ---
 
-## Phase 3 — Creator Discovery Agent
+# Admin Interface
 
-* [ ] Niche influencer discovery (non-Instagram scraping)
-* [ ] Engagement quality scoring
-* [ ] Collaboration suggestion engine
-* [ ] Outreach draft generator
-* [ ] CRM table for creators
-* [ ] Email/DM template personalization
+The control plane provides several views.
 
----
+Dashboard
+Creators
+Outreach
+Engagement
+Logs
+Pattern Reports
 
-## Phase 4 — Performance Feedback Loop
-
-* [ ] Manual performance input (views, saves, shares)
-* [ ] Auto-learning hook optimizer
-* [ ] Signal weighting adjustments
-* [ ] Top-performing pattern detection
-* [ ] Idea pruning algorithm
+All actions require admin authentication.
 
 ---
 
-## Phase 5 — Automated Publishing Layer (Optional, compliant)
+# Creator Discovery Workflow
 
-* [ ] Generate export-ready caption packs
-* [ ] Canva script generation
-* [ ] CapCut script export
-* [ ] Calendar ICS generation
-* [ ] Safe reminder scheduler
-* [ ] Human approval queue
+Typical weekly flow:
 
----
+Sunday
+Discover creators
 
-## Phase 6 — Strategic Expansion
+Monday
+Score creators
 
-* [ ] YouTube Shorts adaptation
-* [ ] Pinterest idea conversion
-* [ ] Blog post auto-expansion
-* [ ] Email newsletter auto-draft
-* [ ] Product integration suggestions
-* [ ] Affiliate content variant generator
+Tuesday
+Generate outreach drafts
 
----
+Wednesday
+Send approved outreach
 
-## Future Infrastructure Improvements
-
-* [ ] Replace Celery with Temporal (advanced workflows)
-* [ ] Switch to structured event streaming
-* [ ] Vector memory store for idea uniqueness
-* [ ] Model router (fast vs. reasoning vs. rewrite)
-* [ ] GPU-accelerated local inference
-* [ ] Automated model benchmarking
+Friday
+Review results
 
 ---
 
-# Design Philosophy
+# Exclusion Rules
 
-This system is built around:
+Creators are skipped when:
 
-* Human oversight
-* Compliance safety
-* Non-bot engagement growth
-* Deterministic data storage
-* Modular AI agents
-* Local-first privacy
+Follower count above 250k
+Bio contains spam keywords
+Account appears to be a store or brand
+Very low activity
 
-It is not designed to automate engagement spam or violate platform terms.
+This keeps the database high quality.
 
 ---
 
-# Long-Term Vision
+# Database Models
 
-Transform Hello To Natural into:
+Key entities include:
 
-* A high-output content brand
-* A community-driven wellness authority
-* A repeatable AI-powered marketing engine
-* A blueprint for other local-first AI business stacks
+Creators
+CreatorEdges
+CreatorRelationships
+PostDrafts
+EngagementQueue
+OutreachDrafts
+ViralPatternReports
 
----
-
-# Contributing
-
-Future improvements should:
-
-* Preserve structured JSON contracts
-* Avoid brittle scraping dependencies
-* Maintain human-in-the-loop design
-* Prefer deterministic over “magical” behavior
-* Include logging for all AI calls
+These power analytics and automation.
 
 ---
 
-# License
+# Example Automation Pipeline
 
-Private internal use for Hello To Natural.
+Discovery
+
+↓
+
+Fraud detection
+
+↓
+
+Scoring
+
+↓
+
+Similarity expansion
+
+↓
+
+Outreach draft generation
+
+↓
+
+Human approval
+
+↓
+
+Execution
 
 ---
+
+# Content Insights
+
+The system also analyzes reels and captions.
+
+Outputs:
+
+Common hooks
+Typical reel length
+Best performing CTAs
+
+This improves future content.
+
+---
+
+# Development Workflow
+
+When making code changes:
+
+1. Update models
+2. Create migration
+3. Update worker agents
+4. Test locally
+5. Commit
+
+---
+
+# Future Improvements
+
+Potential next upgrades:
+
+TikTok creator discovery
+YouTube Shorts ingestion
+Pinterest discovery
+Audience demographic modeling
+Creator performance tracking
+Automated giveaway coordination
+
+---
+
+# Notes
+
+This system is designed to help grow Hello To Natural **organically and authentically**.
+
+Automation supports the brand voice but does not replace it.
+
+Mary and Darrell remain the voice of the brand.
+
+---
+
+# Maintainers
+
+Hello To Natural
+
+Built for internal growth operations.

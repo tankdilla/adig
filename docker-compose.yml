@@ -41,6 +41,9 @@ services:
       BUILD_SHOOT_PACK_TASK: tasks.build_shoot_pack
       BUILD_BROLL_PACK_TASK: tasks.build_broll_pack
       BUILD_ENGAGEMENT_QUEUE_TASK: tasks.build_engagement_queue
+      BUILD_OUTREACH_BATCH_TASK: tasks.build_outreach_batch
+      BUILD_OUTREACH_FOLLOWUPS_TASK: tasks.build_outreach_followups
+      SCORE_CREATORS_TASK: tasks.score_creators
       LLM_PROVIDER: ollama
       OLLAMA_BASE_URL: http://ollama:11434
       PYTHONPATH: /app:/shared

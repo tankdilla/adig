@@ -1,0 +1,90 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Creator Graph • H2N</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; max-width: 980px; margin: 0 auto; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; margin: 12px 0; }
+    .row { display:flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+    .pill { display:inline-block; padding:6px 10px; border-radius: 999px; background:#f2f2f2; font-size: 12px; }
+    button { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; background: white; cursor:pointer; }
+    input { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; }
+    .muted { color:#666; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px; border-bottom: 1px solid #eee; text-align:left; vertical-align: top; }
+    th { font-size: 13px; color:#666; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div>
+      <h2>Creator Graph</h2>
+      <div class="muted">Mentions + similarity edges (MVP)</div>
+    </div>
+    <div class="row">
+      <a href="/admin/creators" class="pill">← Creators</a>
+      <a href="/admin" class="pill">Admin</a>
+      <form method="post" action="/logout">
+        <button type="submit">Logout</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <form method="get" action="/admin/graph" class="row">
+      <div>
+        <div class="muted">Handle</div>
+        <input name="handle" value="{{ handle }}" placeholder="@creator" size="22" />
+      </div>
+      <button type="submit">Load</button>
+    </form>
+
+    {% if creator %}
+      <div style="margin-top: 10px;">
+        <span class="pill"><b>@{{ creator.handle }}</b></span>
+        <span class="pill">score {{ creator.score }}</span>
+        {% if creator.followers_est %}<span class="pill">{{ creator.followers_est }} followers</span>{% endif %}
+      </div>
+    {% else %}
+      <p class="muted" style="margin-top: 10px;">Enter a handle to view edges.</p>
+    {% endif %}
+  </div>
+
+  {% if creator %}
+  <div class="card">
+    <h3>Neighbors</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Edge</th>
+          <th>Neighbor</th>
+          <th>Weight</th>
+          <th>Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in neighbors %}
+        <tr>
+          <td><span class="pill">{{ row.edge.edge_type.value }}</span></td>
+          <td>
+            {% if row.creator %}
+              <b>@{{ row.creator.handle }}</b>
+              <div class="muted">score {{ row.creator.score }}{% if row.creator.followers_est %} • {{ row.creator.followers_est }} followers{% endif %}</div>
+            {% else %}
+              <span class="muted">(missing)</span>
+            {% endif %}
+          </td>
+          <td>{{ '%.2f' % row.edge.weight }}</td>
+          <td class="muted">{{ row.edge.edge_metadata or {} }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+</body>
+</html>

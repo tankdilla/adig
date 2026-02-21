@@ -12,6 +12,9 @@ RUN pip install --no-cache-dir \
     playwright beautifulsoup4 pyyaml lxml \
     structlog==24.1.0 python-json-logger==2.0.7
 
+# Install Playwright browser dependencies + Chromium
+RUN python -m playwright install --with-deps chromium
+
 COPY app /app
 
 CMD ["celery", "-A", "celery_app.celery", "worker", "--loglevel=INFO", "--concurrency=2"]
