@@ -1,0 +1,283 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>@{{ creator.handle }} • Creator Profile</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; max-width: 1100px; margin: 0 auto; }
+    a { color: inherit; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap: wrap; }
+    .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; margin: 12px 0; }
+    .row { display:flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .pill { display:inline-block; padding:6px 10px; border-radius: 999px; background:#f2f2f2; font-size: 12px; }
+    .muted { color:#666; font-size: 14px; }
+    button { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; background: white; cursor:pointer; }
+    input, select, textarea { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; width: 100%; }
+    textarea { min-height: 90px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px; border-bottom: 1px solid #eee; text-align:left; vertical-align: top; }
+    th { font-size: 13px; color:#666; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div>
+      <h2>@{{ creator.handle }}</h2>
+      <div class="muted">
+        Score: <b>{{ creator.score }}</b> • Followers: <b>{{ creator.followers_est or "—" }}</b> • Fraud: <b>{{ creator.fraud_score }}</b>
+        {% if creator.is_brand %} • <span class="pill">brand</span>{% endif %}
+        {% if creator.is_spam %} • <span class="pill">spam</span>{% endif %}
+      </div>
+      <div class="muted" style="margin-top:4px;">
+        <a class="pill" href="/admin/creators">← Back</a>
+        <a class="pill" href="https://www.instagram.com/{{ creator.handle }}" target="_blank">Open Instagram</a>
+        <a class="pill" href="/admin/graph?handle={{ creator.handle }}">View graph</a>
+      </div>
+    </div>
+    <form method="post" action="/logout">
+      <button type="submit">Logout</button>
+    </form>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Outreach Fit</h3>
+      <div class="row">
+        <span class="pill">status: {{ creator.outreach_status or "eligible" }}</span>
+      </div>
+      {% if creator.outreach_exclude_reason %}
+        <p class="muted">Reason: {{ creator.outreach_exclude_reason }}</p>
+      {% endif %}
+
+      <div class="row" style="align-items: end;">
+        <form method="post" action="/admin/creators/{{ creator.id }}/outreach_status" style="flex:1;">
+          <div class="muted">Set status</div>
+          <select name="status">
+            <option value="eligible">eligible</option>
+            <option value="excluded">excluded (not a fit)</option>
+            <option value="do_not_contact">do_not_contact (DNC)</option>
+          </select>
+          <div style="height:8px;"></div>
+          <input name="reason" placeholder="Reason (optional)" />
+          <div style="height:8px;"></div>
+          <button type="submit">Update</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Relationship</h3>
+      {% if relationship %}
+        <div class="row">
+          <span class="pill">status: {{ relationship.status }}</span>
+          {% if relationship.last_contacted_at %}<span class="pill">last contacted: {{ relationship.last_contacted_at }}</span>{% endif %}
+        </div>
+        {% if relationship.notes %}
+          <p class="muted">{{ relationship.notes }}</p>
+        {% endif %}
+      {% else %}
+        <p class="muted">No relationship record yet.</p>
+      {% endif %}
+
+      <form method="post" action="/admin/creators/{{ creator.id }}/relationship">
+        <div class="muted">Set relationship status</div>
+        <select name="status">
+          <option value="new">new</option>
+          <option value="contacted">contacted</option>
+          <option value="replied">replied</option>
+          <option value="partnered">partnered</option>
+          <option value="declined">declined</option>
+          <option value="blocked">blocked</option>
+        </select>
+        <div style="height:8px;"></div>
+        <textarea name="notes" placeholder="Notes (optional)"></textarea>
+        <div style="height:8px;"></div>
+        <button type="submit">Save</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Niche Tags + Notes</h3>
+    <div class="muted">Tags: {{ creator.niche_tags or "" }}</div>
+    <p class="muted">{{ creator.notes or "" }}</p>
+  </div>
+
+  <div class="card">
+    <h3>Create Outreach Draft</h3>
+
+    <form method="post" action="/admin/creators/{{ creator.id }}/outreach_drafts" style="margin-top:10px;">
+        <div class="grid">
+        <div>
+            <div class="muted">Campaign (optional)</div>
+            <select name="campaign_id">
+            <option value="">—</option>
+            {% for camp in campaigns %}
+                <option value="{{ camp.id }}">{{ camp.name }}</option>
+            {% endfor %}
+            </select>
+        </div>
+
+        <div>
+            <div class="muted">Send channel</div>
+            <select name="send_channel">
+            <option value="instagram_dm">instagram_dm</option>
+            <option value="email">email</option>
+            <option value="comment">comment</option>
+            </select>
+        </div>
+
+        <div>
+            <div class="muted">Offer type</div>
+            <input name="offer_type" placeholder="e.g., gifted product, paid collab, affiliate" />
+        </div>
+
+        <div>
+            <div class="muted">Campaign name (optional)</div>
+            <input name="campaign_name" placeholder="e.g., Spring Body Oils Push" />
+        </div>
+        </div>
+
+        <div style="height:10px;"></div>
+
+        <div class="muted">Message</div>
+        <textarea name="message" placeholder="Write a DM here…"></textarea>
+
+        <div style="height:10px;"></div>
+        <button type="submit">Create Draft</button>
+    </form>
+
+    <div style="height:10px;"></div>
+
+    <form method="post" action="/admin/creators/{{ creator.id }}/outreach_drafts/template">
+        <div class="muted">Or generate a quick template (no LLM)</div>
+        <div class="row" style="align-items:end;">
+        <input name="offer_type" placeholder="Offer type (optional)" style="max-width:320px;" />
+        <input name="campaign_name" placeholder="Campaign name (optional)" style="max-width:320px;" />
+        <button type="submit">Create Template Draft</button>
+        </div>
+    </form>
+    </div>
+
+  <div class="card">
+    <h3>Outreach Drafts (latest)</h3>
+    {% if drafts and drafts|length > 0 %}
+        <table>
+        <thead>
+            <tr>
+            <th>Created</th>
+            <th>Campaign</th>
+            <th>Approval</th>
+            <th>Outreach</th>
+            <th>Message</th>
+            <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for d in drafts %}
+            <tr>
+            <td class="muted">{{ d.created_at }}</td>
+            <td class="muted">{{ d.campaign_name or (d.campaign.name if d.campaign else "—") }}</td>
+
+            <td class="muted">{{ d.status }}</td>
+            <td class="muted">{{ d.outreach_status }}</td>
+
+            <td>{{ (d.message or "")[:220] }}{% if (d.message or "")|length > 220 %}…{% endif %}</td>
+
+            <td>
+                <div class="row">
+                {% if d.status != "approved" %}
+                <form method="post" action="/admin/outreach_drafts/{{ d.id }}/approve">
+                    <button type="submit">Approve</button>
+                </form>
+                {% else %}
+                <form method="post" action="/admin/outreach_drafts/{{ d.id }}/unapprove">
+                    <button type="submit">Unapprove</button>
+                </form>
+                {% endif %}
+
+                <form method="post" action="/admin/outreach_drafts/{{ d.id }}/mark_sent">
+                    <input name="thread_url" placeholder="thread url (optional)" style="max-width:220px;" />
+                    <button type="submit">Mark sent</button>
+                </form>
+                </div>
+
+                <div style="height:8px;"></div>
+
+                <form method="post" action="/admin/outreach_drafts/{{ d.id }}/record_reply">
+                <div class="row">
+                    <input name="last_response_text" placeholder="Paste their reply (optional)" style="min-width:320px;" />
+                    <button type="submit">Record reply</button>
+                </div>
+                </form>
+            </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        </table>
+    {% else %}
+        <p class="muted">No outreach drafts yet.</p>
+    {% endif %}
+    </div>
+
+  <div class="card">
+    <h3>Graph Neighbors (top edges)</h3>
+    {% if edges and edges|length > 0 %}
+      <table>
+        <thead>
+          <tr>
+            <th>Edge</th>
+            <th>Type</th>
+            <th>Weight</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in edges %}
+          <tr>
+            <td class="muted">
+              {{ e.source_creator_id }} → {{ e.target_creator_id }}
+            </td>
+            <td class="muted">{{ e.edge_type }}</td>
+            <td class="muted">{{ e.weight }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="muted">Tip: open “View graph” for handle-based view.</p>
+    {% else %}
+      <p class="muted">No edges yet. Run “Build graph”.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h3>Recent Posts</h3>
+    {% if posts and posts|length > 0 %}
+      <table>
+        <thead>
+          <tr>
+            <th>Posted</th>
+            <th>Type</th>
+            <th>URL</th>
+            <th>Metrics</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in posts %}
+          <tr>
+            <td class="muted">{{ p.posted_at or "—" }}</td>
+            <td class="muted">{{ p.post_type }}</td>
+            <td class="muted"><a href="{{ p.post_url }}" target="_blank">Open</a></td>
+            <td class="muted">{{ p.metrics }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">No posts stored for this creator yet.</p>
+    {% endif %}
+  </div>
+</body>
+</html>

@@ -223,6 +223,9 @@ class Creator(Base):
     score: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
+    outreach_status: Mapped[str] = mapped_column(String(32), nullable=False, default="eligible")
+    outreach_exclude_reason: Mapped[str] = mapped_column(Text, nullable=True)
+
 
 class CreatorRelationship(Base):
     """Tracks outreach relationship lifecycle to prevent re-contact spam."""
@@ -259,7 +262,14 @@ class CreatorEdge(Base):
     weight: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     # metadata: Mapped[dict] = mapped_column(JSONB, nullable=True)
     # edge_metadata: Mapped[dict] = mapped_column("metadata", JSONB, nullable=True)
-    edge_metadata: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    # edge_metadata: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    # IMPORTANT: DB column is named "metadata" (reserved attribute name on Declarative),
+    # so our Python attribute must be different but mapped to the "metadata" column.
+    edge_metadata: Mapped[dict | None] = mapped_column(
+        "metadata",  # <- DB column name
+        JSONB,
+        nullable=True,
+    )
     last_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 

@@ -39,7 +39,7 @@
     <h3>Automation</h3>
     <div class="row">
       <form method="post" action="/admin/creators/discover">
-        <div class="muted">Discover (hashtags)</div>
+        <div class="muted">Discover Creators(via hashtags)</div>
         <input name="limit" value="200" size="6" />
         <input name="rotate" value="4" size="4" />
         <button type="submit">Run Discovery</button>
@@ -71,14 +71,16 @@
           <th>Fraud</th>
           <th>Tags</th>
           <th>Notes</th>
+          <th>Outreach</th>
         </tr>
       </thead>
       <tbody>
         {% for c in creators %}
         <tr>
           <td>
-            <div><b>@{{ c.handle }}</b></div>
+            <div><b><a href="/admin/creators/{{ c.id }}">@{{ c.handle }}</a></b></div>
             <div class="muted"><a href="/admin/graph?handle={{ c.handle }}">View graph</a></div>
+            <div class="muted"><a href="https://www.instagram.com/{{c.handle}}">Instagram</a></div>
           </td>
           <td>{{ c.score }}</td>
           <td>{{ c.followers_est or "—" }}</td>
@@ -89,6 +91,34 @@
           </td>
           <td class="muted">{{ c.niche_tags or "" }}</td>
           <td class="muted">{{ (c.notes or "")[:240] }}</td>
+          <td>
+            <div class="muted">
+              <span class="pill">{{ c.outreach_status or "eligible" }}</span>
+              {% if c.outreach_exclude_reason %}
+                <div class="muted">{{ (c.outreach_exclude_reason or "")[:120] }}</div>
+              {% endif %}
+            </div>
+            {% if not c.outreach_status == "excluded" %}
+              <div class="row" style="margin-top:8px;">
+                <form method="post" action="/admin/creators/{{ c.id }}/outreach_status">
+                  <input type="hidden" name="status" value="excluded" />
+                  <input name="reason" placeholder="Reason (optional)" size="14" />
+                  <button type="submit">Not a fit</button>
+                </form>
+
+                <form method="post" action="/admin/creators/{{ c.id }}/outreach_status">
+                  <input type="hidden" name="status" value="do_not_contact" />
+                  <input name="reason" placeholder="Reason (optional)" size="14" />
+                  <button type="submit">DNC</button>
+                </form>
+              {% endif %}
+              <form method="post" action="/admin/creators/{{ c.id }}/outreach_status">
+                <input type="hidden" name="status" value="eligible" />
+                <input type="hidden" name="reason" value="" />
+                <button type="submit">Re-include</button>
+              </form>
+            </div>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -100,6 +130,9 @@
         {% if page > 1 %}
           <a class="pill" href="/admin/creators?page={{ page - 1 }}&min_score={{ min_score }}&max_fraud={{ max_fraud }}">Prev</a>
         {% endif %}
+        <div class="muted">
+          Showing {{ (page-1)*page_size + 1 }}–{{ (page-1)*page_size + creators|length }} of {{ total }}
+        </div>
         {% if total > page * page_size %}
           <a class="pill" href="/admin/creators?page={{ page + 1 }}&min_score={{ min_score }}&max_fraud={{ max_fraud }}">Next</a>
         {% endif %}

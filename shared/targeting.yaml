@@ -2,6 +2,17 @@
 
 instagram:
   # Core niches aligned with Hello To Natural product ecosystem (body care + wellness rituals)
+  follower_min: 1500
+  follower_max: 35000
+  hard_max_followers: 150000
+
+  oversample_factor: 6
+  per_hashtag_posts: 120
+  max_total_handles: 1200
+  enrich_concurrency: 6
+
+  # Set true if you want excluded creators stored with reasons (audit)
+  include_excluded_in_db: false
   target_niches:
     - natural skincare
     - body butter
@@ -21,21 +32,36 @@ instagram:
 
   # Hashtags we can use as discovery seeds (keep it safe; rotate and don’t over-hit any one tag)
   seed_hashtags:
-    - naturalskincare
-    - bodybutter
-    - sheabutter
-    - mangobutter
-    - bodyoil
-    - selfcare
-    - herbaltea
-    - holistichealth
-    - blackownedbusiness
-    - blackgirlwellness
-    - plantbased
-    - pcos
-    - diabeteats
-    - faithandwellness
-    - mississippi
+    - bodyoillayering
+    - dryskinremedy
+    - glowroutine
+    - sheaandmango
+    - whippedbodybutter
+    - noncomedogenicskincare
+    - eczemaaware
+    - hyperpigmentationjourney
+    - melaninskincare
+    - sensitiveskinroutine
+    - herbalteablends
+    - teaformood
+    - wombwellness
+    - pcosnutrition
+    - plantbasedwellnessjourney
+    # - naturalskincare
+    # - bodybutter
+    # - sheabutter
+    # - mangobutter
+    # - bodyoil
+    # - selfcare
+    # - herbaltea
+    # - holistichealth
+    # - blackownedbusiness
+    # - blackgirlwellness
+    # - plantbased
+    # - pcos
+    # - diabeteats
+    # - faithandwellness
+    # - mississippi
 
   # Exclude list: brands, mega accounts, spam pages
   exclude:

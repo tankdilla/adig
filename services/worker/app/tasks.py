@@ -11,8 +11,7 @@ from agents.engagement.scheduler import schedule_actions
 from celery_app import celery
 from agents.safety import guardrails_ok
 from agents.content_intel.pipeline import run_content_intel
-# from agents.creator_discovery import run_creator_discovery
-# from agents.engagement_queue import build_engagement_queue
+
 from agents.scrape import fetch_page_text
 from agents.broll.pexels import get_broll_for_keywords
 
@@ -131,6 +130,7 @@ def build_outreach_batch(campaign_id: int, limit: int = 20):
             .filter(Creator.is_brand.is_(False))
             .filter(Creator.is_spam.is_(False))
             .filter(Creator.fraud_score < 70)
+            .filter(Creator.outreach_status.notin_(["excluded", "do_not_contact"]))
             .order_by(Creator.score.desc(), Creator.created_at.desc())
             .limit(400)
             .all()
@@ -159,7 +159,7 @@ def build_outreach_batch(campaign_id: int, limit: int = 20):
         for c in picked:
             # default is deterministic personalized DM; LLM can be layered later
             msg = build_personalized_dm(c, campaign_name=campaign.name)
-            if not msg or not guardrails_ok(msg):
+            if not msg:
                 msg = f"Hey @{c.handle}! Thank you for all you share. I’m with Hello To Natural—would you be open to a gifted collab + optional affiliate code if it feels aligned? If yes, I can send quick details."
 
             od = OutreachDraft(
@@ -194,6 +194,10 @@ def build_outreach_batch(campaign_id: int, limit: int = 20):
         raise
     finally:
         db.close()
+
+@celery.task(name="tasks.engagement_queue_daily")
+def engagement_queue_daily():
+    return build_engagement_queue()
 
 @celery.task(name="tasks.build_engagement_queue")
 def build_engagement_queue():
@@ -438,7 +442,7 @@ def score_creators(limit: int = 200):
 
     db = SessionLocal()
     try:
-        creators = db.query(Creator).order_by(Creator.created_at.desc()).limit(int(limit)).all()
+        creators = db.query(Creator).filter(Creator.score == 0).order_by(Creator.created_at.desc()).limit(int(limit)).all()
 
         updated = 0
         for c in creators:

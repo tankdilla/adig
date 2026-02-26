@@ -5,7 +5,7 @@ from celery import Celery
 from fastapi import FastAPI, Depends, Header, HTTPException, Request, Form, status
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import and_, or_    
+from sqlalchemy import func, and_, or_
 from sqlalchemy.orm import Session
 from datetime import datetime, date, time, timedelta
 
@@ -195,15 +195,28 @@ def admin_creators(
     page_size = 200
     offset = (page - 1) * page_size
 
+    # query = (
+    #     db.query(Creator)
+    #     .filter(Creator.score >= min_score)
+    #     .filter(Creator.is_brand.is_(False))
+    #     .filter(Creator.is_spam.is_(False))
+    #     .filter(Creator.fraud_score < max_fraud)
+    #     # .filter(Creator.outreach_status == "eligible")
+    #     .order_by(Creator.score.desc(), Creator.created_at.desc())
+    # )
+
     query = (
         db.query(Creator)
-        .filter(Creator.score >= min_score)
-        .filter(Creator.is_brand.is_(False))
-        .filter(Creator.is_spam.is_(False))
-        .filter(Creator.fraud_score < max_fraud)
-        .order_by(Creator.score.desc(), Creator.created_at.desc())
+        .filter(func.coalesce(Creator.score, 0) >= min_score)
+        .filter(func.coalesce(Creator.is_brand, False).is_(False))
+        .filter(func.coalesce(Creator.is_spam, False).is_(False))
+        .filter(func.coalesce(Creator.fraud_score, 0) < max_fraud)
+        # .order_by(Creator.score.desc().nullslast(), Creator.created_at.desc())
+        .order_by(Creator.created_at.desc(), Creator.score.desc().nullslast())
     )
-    total = query.count()
+
+    # total = query.count()
+    total = query.order_by(None).count()
     creators = query.offset(offset).limit(page_size).all()
 
     return templates.TemplateResponse(
@@ -220,6 +233,307 @@ def admin_creators(
         },
     )
 
+# make sure these models exist in your db_models import list
+# Creator, CreatorEdge, CreatorRelationship, OutreachDraft, OutreachEvent, CreatorPost
+# If your names differ, adjust accordingly.
+
+@app.get("/admin/creators/{creator_id}", response_class=HTMLResponse)
+def admin_creator_profile(
+    creator_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user=Depends(require_admin),  # or _: None = Depends(require_admin) if you're using header auth
+):
+    creator = db.get(Creator, creator_id)
+    if not creator:
+        raise HTTPException(status_code=404, detail="Creator not found")
+
+    # Relationship (optional table)
+    rel = (
+        db.query(CreatorRelationship)
+        .filter(CreatorRelationship.creator_id == creator_id)
+        .first()
+        if "CreatorRelationship" in globals()
+        else None
+    )
+
+    # Recent outreach drafts + events (optional)
+    drafts = []
+    events = []
+    try:
+        drafts = (
+            db.query(OutreachDraft)
+            .filter(OutreachDraft.creator_id == creator_id)
+            .order_by(OutreachDraft.created_at.desc())
+            .limit(20)
+            .all()
+        )
+    except Exception:
+        drafts = []
+
+    try:
+        if drafts:
+            draft_ids = [d.id for d in drafts]
+            events = (
+                db.query(OutreachEvent)
+                .filter(OutreachEvent.outreach_draft_id.in_(draft_ids))
+                .order_by(OutreachEvent.created_at.desc())
+                .limit(50)
+                .all()
+            )
+    except Exception:
+        events = []
+
+    # Neighbor edges (optional)
+    edges = []
+    try:
+        edges = (
+            db.query(CreatorEdge)
+            .filter(
+                or_(
+                    CreatorEdge.source_creator_id == creator_id,
+                    CreatorEdge.target_creator_id == creator_id,
+                )
+            )
+            .order_by(CreatorEdge.weight.desc())
+            .limit(50)
+            .all()
+        )
+    except Exception:
+        edges = []
+
+    # Recent posts (optional)
+    posts = []
+    try:
+        posts = (
+            db.query(CreatorPost)
+            .filter(CreatorPost.creator_id == creator_id)
+            .order_by(CreatorPost.posted_at.desc().nullslast(), CreatorPost.created_at.desc())
+            .limit(20)
+            .all()
+        )
+    except Exception:
+        posts = []
+
+    campaigns = db.query(OutreachCampaign).order_by(OutreachCampaign.created_at.desc()).limit(50).all()
+
+    return templates.TemplateResponse(
+        "creator_profile.html",
+        {
+            "request": request,
+            "creator": creator,
+            "relationship": rel,
+            "drafts": drafts,
+            "events": events,
+            "edges": edges,
+            "posts": posts,
+            "campaigns": campaigns,
+        },
+    )
+
+# @app.post("/admin/creators/{creator_id}/outreach_status")
+# def admin_set_creator_outreach_status(
+#     creator_id: int,
+#     status: str = Form(...),   # eligible | excluded | do_not_contact
+#     reason: str = Form(""),
+#     db: Session = Depends(get_db),
+#     user=Depends(require_admin),
+# ):
+#     c = db.get(Creator, creator_id)
+#     if not c:
+#         raise HTTPException(status_code=404, detail="Creator not found")
+
+#     status = (status or "").strip().lower()
+#     if status not in {"eligible", "excluded", "do_not_contact"}:
+#         raise HTTPException(status_code=400, detail="Invalid status")
+
+#     c.outreach_status = status
+#     c.outreach_exclude_reason = (reason or "").strip()[:2000] or None
+#     db.add(c)
+#     db.commit()
+
+#     return RedirectResponse(url=f"/admin/creators/{creator_id}", status_code=303)
+
+@app.post("/admin/creators/{creator_id}/outreach_drafts")
+def admin_create_outreach_draft(
+    creator_id: int,
+    message: str = Form(...),
+    offer_type: str = Form(""),
+    campaign_name: str = Form(""),
+    campaign_id: str = Form(""),
+    send_channel: str = Form("instagram_dm"),
+    db: Session = Depends(get_db),
+    user=Depends(require_admin),
+):
+    creator = db.get(Creator, creator_id)
+    if not creator:
+        raise HTTPException(status_code=404, detail="Creator not found")
+
+    msg = (message or "").strip()
+    if not msg:
+        raise HTTPException(status_code=400, detail="Message is required")
+
+    draft = OutreachDraft(
+        creator_id=creator_id,
+        message=msg,
+        offer_type=(offer_type or "").strip() or None,
+        campaign_name=(campaign_name or "").strip() or None,
+        send_channel=(send_channel or "instagram_dm").strip(),
+    )
+
+    # optional FK
+    if (campaign_id or "").strip():
+        try:
+            draft.campaign_id = int(campaign_id)
+        except ValueError:
+            pass
+
+    db.add(draft)
+    db.commit()
+
+    return RedirectResponse(url=f"/admin/creators/{creator_id}", status_code=303)
+
+@app.post("/admin/creators/{creator_id}/outreach_drafts/template")
+def admin_create_outreach_draft_template(
+    creator_id: int,
+    offer_type: str = Form(""),
+    campaign_name: str = Form(""),
+    db: Session = Depends(get_db),
+    user=Depends(require_admin),
+):
+    creator = db.get(Creator, creator_id)
+    if not creator:
+        raise HTTPException(status_code=404, detail="Creator not found")
+
+    offer = (offer_type or "").strip() or "a gifted product + feature"
+    camp = (campaign_name or "").strip()
+
+    intro = "Hey! I’m Mary from Hello To Natural 🌿"
+    line1 = f"I love your content and I think your audience would really connect with our brand."
+    line2 = f"Would you be open to {offer}?"
+    line3 = "If so, I can share details + shipping info. No pressure either way 💛"
+    close = "— Mary, Hello To Natural"
+
+    msg = "\n".join([intro, "", line1, line2, line3, "", close])
+
+    draft = OutreachDraft(
+        creator_id=creator_id,
+        message=msg,
+        offer_type=(offer_type or "").strip() or None,
+        campaign_name=camp or None,
+        send_channel="instagram_dm",
+    )
+    db.add(draft)
+    db.commit()
+
+    return RedirectResponse(url=f"/admin/creators/{creator_id}", status_code=303)
+
+@app.post("/admin/outreach_drafts/{draft_id}/approve")
+def admin_approve_outreach_draft(
+    draft_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(require_admin),
+):
+    d = db.get(OutreachDraft, draft_id)
+    if not d:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    d.status = ApprovalStatus.approved
+    d.approved_by = getattr(user, "email", None) or getattr(user, "sub", None) or "admin"
+    d.approved_at = datetime.utcnow()
+    db.add(d)
+    db.commit()
+
+    return RedirectResponse(url=f"/admin/creators/{d.creator_id}", status_code=303)
+
+
+@app.post("/admin/outreach_drafts/{draft_id}/unapprove")
+def admin_unapprove_outreach_draft(
+    draft_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(require_admin),
+):
+    d = db.get(OutreachDraft, draft_id)
+    if not d:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    d.status = ApprovalStatus.pending
+    d.approved_by = None
+    d.approved_at = None
+    db.add(d)
+    db.commit()
+
+    return RedirectResponse(url=f"/admin/creators/{d.creator_id}", status_code=303)
+
+
+@app.post("/admin/outreach_drafts/{draft_id}/mark_sent")
+def admin_mark_outreach_sent(
+    draft_id: int,
+    thread_url: str = Form(""),
+    db: Session = Depends(get_db),
+    user=Depends(require_admin),
+):
+    d = db.get(OutreachDraft, draft_id)
+    if not d:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    d.outreach_status = OutreachStatus.sent
+    d.sent_at = datetime.utcnow()
+    d.sent_by = getattr(user, "email", None) or getattr(user, "sub", None) or "admin"
+    d.thread_url = (thread_url or "").strip() or None
+
+    db.add(d)
+    db.commit()
+
+    return RedirectResponse(url=f"/admin/creators/{d.creator_id}", status_code=303)
+
+
+@app.post("/admin/outreach_drafts/{draft_id}/record_reply")
+def admin_record_outreach_reply(
+    draft_id: int,
+    last_response_text: str = Form(""),
+    db: Session = Depends(get_db),
+    user=Depends(require_admin),
+):
+    d = db.get(OutreachDraft, draft_id)
+    if not d:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    txt = (last_response_text or "").strip()
+    if txt:
+        d.last_response_text = txt
+        d.last_response_at = datetime.utcnow()
+        d.outreach_status = OutreachStatus.replied
+
+    db.add(d)
+    db.commit()
+
+    return RedirectResponse(url=f"/admin/creators/{d.creator_id}", status_code=303)
+
+@app.post("/admin/creators/{creator_id}/relationship")
+def admin_set_creator_relationship(
+    creator_id: int,
+    status: str = Form(...),  # new/contacted/replied/partnered/declined/blocked
+    notes: str = Form(""),
+    db: Session = Depends(get_db),
+    user=Depends(require_admin),
+):
+    c = db.get(Creator, creator_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="Creator not found")
+
+    rel = db.query(CreatorRelationship).filter(CreatorRelationship.creator_id == creator_id).first()
+    if not rel:
+        rel = CreatorRelationship(creator_id=creator_id)
+
+    rel.status = status
+    rel.notes = (notes or "").strip()[:4000] or None
+    rel.updated_at = datetime.utcnow()
+
+    db.add(rel)
+    db.commit()
+
+    return RedirectResponse(url=f"/admin/creators/{creator_id}", status_code=303)
 
 @app.post("/admin/creators/discover")
 def admin_creators_discover(
@@ -232,6 +546,30 @@ def admin_creators_discover(
     celery_client.send_task(CREATOR_DISCOVERY_TASK, kwargs={"limit": int(limit), "rotate": int(rotate)})
     return RedirectResponse(url="/admin/creators", status_code=303)
 
+### Set creator outreach status
+@app.post("/admin/creators/{creator_id}/outreach_status")
+def set_creator_outreach_status(
+    creator_id: int,
+    status: str = Form(...),  # eligible | excluded | do_not_contact
+    reason: str = Form(""),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
+    c = db.get(Creator, creator_id)
+    if not c:
+        raise HTTPException(404, "Creator not found")
+
+    status = status.strip().lower()
+    if status not in {"eligible", "excluded", "do_not_contact"}:
+        raise HTTPException(400, "Invalid status")
+
+    c.outreach_status = status
+    c.outreach_exclude_reason = (reason or "").strip()[:2000] or None
+    db.add(c)
+    db.commit()
+
+    # return {"id": c.id, "handle": c.handle, "outreach_status": c.outreach_status}
+    return RedirectResponse(url="/admin/creators", status_code=303)
 
 @app.post("/admin/creators/score")
 def admin_creators_score(
@@ -240,7 +578,7 @@ def admin_creators_score(
     user: str = Depends(require_admin),
 ):
     celery_client.send_task(SCORE_CREATORS_TASK, kwargs={"limit": int(limit)})
-    return RedirectResponse(url="/admin/creators", status_code=303)
+    return RedirectResponse(url="/admin?msg=Scoring+creators...+refresh+in+30-90+seconds", status_code=303)
 
 
 @app.post("/admin/creators/graph")
@@ -776,17 +1114,6 @@ def record_outreach_response(
     db.add(OutreachEvent(outreach_draft_id=d.id, event_type=f"response:{d.outreach_status.value}", note=response_text, created_at=datetime.utcnow()))
     db.commit()
     return RedirectResponse(url="/admin/outreach?view=sent", status_code=303)
-
-### Score creators
-@app.post("/admin/creators/score")
-def admin_score_creators(
-    limit: int = Form(200),
-    db: Session = Depends(get_db),
-    user: str = Depends(require_admin),
-):
-    celery_client.send_task(SCORE_CREATORS_TASK, args=[], kwargs={"limit": limit})
-    return RedirectResponse(url="/admin?msg=Scoring+creators...+refresh+in+30-90+seconds", status_code=303)
-# --- Admin UI: Generate Today (celery task) ---
 
 @app.post("/admin/generate-today")
 def generate_today(
