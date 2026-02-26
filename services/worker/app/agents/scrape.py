@@ -1,7 +1,7 @@
+from __future__ import annotations
+
 import os
 from playwright.async_api import async_playwright
-
-from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager

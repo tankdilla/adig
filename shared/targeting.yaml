@@ -2,14 +2,20 @@
 
 instagram:
   # Core niches aligned with Hello To Natural product ecosystem (body care + wellness rituals)
-  follower_min: 1500
-  follower_max: 35000
-  hard_max_followers: 150000
+  follower_min: 3000
+  follower_max: 30000
+  hard_max_followers: 120000
 
-  oversample_factor: 6
+  oversample_factor: 8
   per_hashtag_posts: 120
-  max_total_handles: 1200
+  max_total_handles: 1600
   enrich_concurrency: 6
+
+  enable_related_expansion: true
+  related_seed_count: 40
+  related_per_seed_posts: 10
+  related_max_total_handles: 1200
+  related_enrich_concurrency: 6
 
   # Set true if you want excluded creators stored with reasons (audit)
   include_excluded_in_db: false
@@ -32,21 +38,60 @@ instagram:
 
   # Hashtags we can use as discovery seeds (keep it safe; rotate and don’t over-hit any one tag)
   seed_hashtags:
-    - bodyoillayering
-    - dryskinremedy
-    - glowroutine
-    - sheaandmango
-    - whippedbodybutter
-    - noncomedogenicskincare
-    - eczemaaware
-    - hyperpigmentationjourney
+    # Skin care
+    - smallbatchskincare
+    - naturalskincarejourney
+    - estheticianapproved
+    - dryskinroutine
+    - glowingskintips
     - melaninskincare
-    - sensitiveskinroutine
-    - herbalteablends
-    - teaformood
-    - wombwellness
-    - pcosnutrition
-    - plantbasedwellnessjourney
+    - skincareroutinevideo
+    - skinbarrierrepair
+    - holisticskincare
+    - skincareroutineathome
+
+    # Body care
+    - bodycarecommunity
+    - bodybutterlover
+    - sheaobsessed
+    - selfcarerituals
+    - luxuryselfcare
+    - skincareforblackwomen
+    - naturalbodycare
+    - cleanbodyproducts
+    - moisturizingroutine
+    - skinconfidence
+
+    # Wellness
+    - wellnessforwomen
+    - plantbasedwellness
+    - holisticlivingtips
+    - hormonebalance
+    - pcoswellness
+    - diabeteswellness
+    - faithwellness
+    - herbalwellness
+    - guthealthjourney
+    - naturalhealingtips
+
+    # Smaller niche hash tags
+    # - bodyoillayering
+    # - dryskinremedy
+    # - glowroutine
+    # - sheaandmango
+    # - whippedbodybutter
+    # - noncomedogenicskincare
+    # - eczemaaware
+    # - hyperpigmentationjourney
+    # - melaninskincare
+    # - sensitiveskinroutine
+    # - herbalteablends
+    # - teaformood
+    # - wombwellness
+    # - pcosnutrition
+    # - plantbasedwellnessjourney
+
+    # Big brand hash tags
     # - naturalskincare
     # - bodybutter
     # - sheabutter

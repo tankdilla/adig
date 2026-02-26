@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Intel • H2N</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; max-width: 1100px; margin: 0 auto; }
+    .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; margin: 12px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px; border-bottom: 1px solid #eee; text-align:left; vertical-align: top; }
+    th { font-size: 13px; color:#666; }
+    .pill { display:inline-block; padding:6px 10px; border-radius: 999px; background:#f2f2f2; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <a class="pill" href="/admin">← Admin</a>
+    <a class="pill" href="/admin/creators">Creators</a>
+    <h2>Creator Intel</h2>
+    <p style="color:#666">Fast growth • Niche relevance • Similar to best partners</p>
+  </div>
+
+  <div class="card">
+    <h3>Fastest Growing (7d)</h3>
+    <table>
+      <thead><tr><th>Handle</th><th>Growth 7d</th><th>Followers</th></tr></thead>
+      <tbody>
+        {% for c in fastest %}
+        <tr>
+          <td><a href="/admin/creators/{{c.id}}">@{{c.handle}}</a></td>
+          <td>{{ (c.growth_7d*100) | round(2) }}%</td>
+          <td>{{ c.followers_est or "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>Most Niche-Relevant</h3>
+    <table>
+      <thead><tr><th>Handle</th><th>Niche Score</th><th>Tags</th></tr></thead>
+      <tbody>
+        {% for c in niche %}
+        <tr>
+          <td><a href="/admin/creators/{{c.id}}">@{{c.handle}}</a></td>
+          <td>{{ c.niche_score | round(2) }}</td>
+          <td style="color:#666">{{ c.niche_tags or "" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>Most Similar to Best Partners</h3>
+    <table>
+      <thead><tr><th>Handle</th><th>Similarity</th><th>Notes</th></tr></thead>
+      <tbody>
+        {% for c in similar %}
+        <tr>
+          <td><a href="/admin/creators/{{c.id}}">@{{c.handle}}</a></td>
+          <td>{{ (c.fraud_flags.get("partner_similarity", 0) if c.fraud_flags else 0) | round(3) }}</td>
+          <td style="color:#666">{{ (c.notes or "")[:120] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>

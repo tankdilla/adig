@@ -16,13 +16,18 @@ celery.conf.beat_schedule = {
         "task": "tasks.engagement_queue_daily",
         "schedule": crontab(hour=9, minute=10),
     },
-    "creator-discovery-weekly": {
-        "task": "tasks.creator_discovery_weekly",
-        "schedule": crontab(day_of_week="sun", hour=16, minute=0),
+    "creator-discovery": {
+        "task": "tasks.creator_discovery_hashtags",
+        "schedule": crontab(minute=0, hour="*/6"),
+        "args": (200, 4),
     },
-    # Live execution should be OFF by default; only enable after proving safety
-    # "engagement-execute": {
-    #     "task": "tasks.engagement_execute",
-    #     "schedule": crontab(minute="*/30"),
-    # },
+    "creator-related-expansion": {
+        "task": "tasks.creator_discovery_hashtags",
+        "schedule": crontab(minute=30, hour="*/12"),
+        "args": (200, 4),
+    },
+    "creator-intel": {
+        "task": "tasks.creator_intel_daily",
+        "schedule": crontab(minute=0, hour=3),
+    },
 }

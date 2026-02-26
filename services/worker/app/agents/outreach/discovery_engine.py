@@ -24,14 +24,22 @@ _RE_POST_SHORTCODE = re.compile(r"/p/([A-Za-z0-9_-]{5,})/")
 # (This resets per process restart; that's fine for a heuristic engine.)
 _HTML_CACHE: dict[str, str] = {}
 
+def _extract_profile_shortcodes(html: str, max_posts: int = 24) -> list[str]:
+    # profile pages often contain /p/<shortcode>/ links in the rendered HTML
+    scs = _unique_shortcodes(_RE_POST_SHORTCODE.findall(html))
+    if not scs:
+        return []
+    random.shuffle(scs)
+    return scs[:max_posts]
 
 async def _cached_fetch(url: str) -> str:
     if url in _HTML_CACHE:
         return _HTML_CACHE[url]
     html = await fetch_page_html(url)
-    _HTML_CACHE[url] = html
+    # don't poison cache with login wall / throttling pages
+    if not _looks_like_login_wall(html):
+        _HTML_CACHE[url] = html
     return html
-
 
 def _unique_handles(seq: Iterable[str]) -> list[str]:
     """Unique, normalized handles. Handles are case-insensitive on IG."""
@@ -45,7 +53,6 @@ def _unique_handles(seq: Iterable[str]) -> list[str]:
         out.append(x)
     return out
 
-
 def _unique_shortcodes(seq: Iterable[str]) -> list[str]:
     """Unique post shortcodes. IMPORTANT: shortcodes are case-sensitive -> DO NOT lower()."""
     out: list[str] = []
@@ -58,13 +65,11 @@ def _unique_shortcodes(seq: Iterable[str]) -> list[str]:
         out.append(x)
     return out
 
-
 def _parse_intish(n: str) -> Optional[int]:
     try:
         return int(n)
     except Exception:
         return None
-
 
 @dataclass
 class ProfileSnapshot:
@@ -74,7 +79,6 @@ class ProfileSnapshot:
     bio: str = ""
     external_url: str = ""
     is_verified: bool = False
-
 
 def _extract_profile_snapshot(html: str, handle: str) -> ProfileSnapshot:
     followers = None
@@ -222,6 +226,103 @@ async def discover_handles(
 
     return _unique_handles(handles)[:max_total_handles]
 
+async def discover_related_handles(
+    seed_handles: Sequence[str],
+    *,
+    per_seed_posts: int = 12,
+    max_total_handles: int = 800,
+    max_concurrency: int = 6,
+    prefer_mentions: bool = True,
+) -> list[str]:
+    """
+    Related-creator expansion:
+    1) seed profile -> extract recent post shortcodes
+    2) post pages -> extract:
+       - owner username
+       - @mentions
+       - (best-effort) coauthor_producers usernames (collab posts)
+    """
+    handles: list[str] = []
+    seen_posts: set[str] = set()
+    sem = asyncio.Semaphore(max_concurrency)
+
+    async def _fetch(url: str) -> str:
+        # bounded concurrency + shared cache
+        async with sem:
+            return await _cached_fetch(url)
+
+    async def _crawl_seed(seed: str) -> list[str]:
+        seed = (seed or "").strip().lstrip("@").lower()
+        if not seed:
+            return []
+
+        prof_url = f"https://www.instagram.com/{seed}/"
+        try:
+            prof_html = await _fetch(prof_url)
+        except Exception:
+            return []
+
+        if _looks_like_login_wall(prof_html):
+            return []
+
+        shortcodes = _extract_profile_shortcodes(prof_html, max_posts=per_seed_posts)
+        if not shortcodes:
+            return []
+
+        found: list[str] = []
+
+        for sc in shortcodes:
+            # shortcodes are case-sensitive, keep original
+            if sc in seen_posts:
+                continue
+            seen_posts.add(sc)
+
+            post_url = f"https://www.instagram.com/p/{sc}/"
+            try:
+                post_html = await _fetch(post_url)
+            except Exception:
+                continue
+
+            if _looks_like_login_wall(post_html):
+                continue
+
+            # owner username
+            m = re.search(
+                r"\"owner\"\s*:\s*\{[^}]*\"username\"\s*:\s*\"([A-Za-z0-9._]{2,30})\"",
+                post_html,
+            )
+            if m:
+                found.append(m.group(1))
+
+            # mentions in caption / page
+            if prefer_mentions:
+                found.extend(_RE_HANDLE.findall(post_html))
+
+            # collab posts: coauthor_producers usernames (best-effort)
+            # "coauthor_producers":[{"username":"foo"}, {"username":"bar"}]
+            # Keep this permissive: sometimes whitespace/newlines
+            m2 = re.search(r"\"coauthor_producers\"\s*:\s*\[(.*?)\]", post_html, flags=re.DOTALL)
+            if m2:
+                block = m2.group(1)
+                found.extend(re.findall(r"\"username\"\s*:\s*\"([A-Za-z0-9._]{2,30})\"", block))
+
+            if len(found) >= max_total_handles:
+                break
+
+        return found
+
+    # Crawl seeds concurrently
+    tasks = [_crawl_seed(h) for h in _unique_handles(seed_handles)]
+    for fut in asyncio.as_completed(tasks):
+        try:
+            found = await fut
+        except Exception:
+            continue
+        handles.extend(found)
+        if len(handles) >= max_total_handles:
+            break
+
+    return _unique_handles(handles)[:max_total_handles]
 
 async def enrich_and_filter(
     handles: Sequence[str],
@@ -234,6 +335,12 @@ async def enrich_and_filter(
 ) -> list[dict]:
     out: list[dict] = []
     sem = asyncio.Semaphore(max_concurrency)
+
+    # async def _fetch_profile(h: str) -> tuple[str, str]:
+    #     url = f"https://www.instagram.com/{h}/"
+    #     async with sem:
+    #         html = await fetch_page_html(url)
+    #     return h, html
 
     async def _enrich_one(h: str) -> Optional[dict]:
         profile_url = f"https://www.instagram.com/{h}/"

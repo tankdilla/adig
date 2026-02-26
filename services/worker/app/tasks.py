@@ -7,7 +7,6 @@ from datetime import datetime, timezone, timedelta, date
 from agents.engagement.comments import generate_comment
 from agents.engagement.scheduler import schedule_actions
 
-
 from celery_app import celery
 from agents.safety import guardrails_ok
 from agents.content_intel.pipeline import run_content_intel
@@ -16,7 +15,7 @@ from agents.scrape import fetch_page_text
 from agents.broll.pexels import get_broll_for_keywords
 
 from agents.content_intel.shoot_pack import generate_shoot_pack
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker
 
 from db_models import EngagementAction, EngagementActionType, EngagementStatus
@@ -28,6 +27,7 @@ from agents.llm import draft
 from agents.outreach.discovery import discover_from_hashtags
 from agents.outreach.personalization import build_personalized_dm
 from agents.outreach.fraud_detection import assess_fraud, is_excludable
+from agents.outreach.intel_engine import snapshot_creator, update_growth_fields, compute_niche_signals, best_partner_similarity
 from agents.graph.builder import ensure_creator, extract_mentions, upsert_edge, build_similarity_edges
 from agents.analytics.viral_patterns import build_report
 
@@ -429,6 +429,48 @@ Write a follow-up DM to send now.
     except Exception as e:
         db.rollback()
         log.exception("task_failed", error=str(e))
+        raise
+    finally:
+        db.close()
+
+@celery.task(name="tasks.creator_intel_daily")
+def creator_intel_daily(limit: int = 300):
+    """
+    Daily intel refresh:
+    - snapshot followers/posts (growth)
+    - compute niche signals
+    - compute similarity to partners (lexical)
+    """
+    db = SessionLocal()
+    try:
+        # prioritize likely-relevant creators
+        rows = (
+            db.query(Creator)
+            .filter(func.coalesce(Creator.is_brand, False).is_(False))
+            .filter(func.coalesce(Creator.is_spam, False).is_(False))
+            .order_by(Creator.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+        async def _run():
+            for c in rows:
+                await snapshot_creator(db, c)
+                niche = await compute_niche_signals(db, c)
+                c.niche_score = niche
+                update_growth_fields(db, c)
+                # stash similarity into fraud_flags to avoid a new column for now
+                sim = best_partner_similarity(db, c)
+                ff = c.fraud_flags or {}
+                ff["partner_similarity"] = float(sim)
+                c.fraud_flags = ff
+                c.last_intel_run_at = datetime.utcnow()
+
+        asyncio.run(_run())
+        db.commit()
+        return {"ok": True, "updated": len(rows)}
+    except Exception as e:
+        db.rollback()
         raise
     finally:
         db.close()

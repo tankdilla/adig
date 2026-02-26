@@ -1,5 +1,5 @@
 import enum
-from datetime import datetime
+from datetime import datetime, date
 from sqlalchemy import (
     Column, String, Text, DateTime, Integer, Boolean, Enum, ForeignKey, UniqueConstraint, Float
 )
@@ -226,6 +226,12 @@ class Creator(Base):
     outreach_status: Mapped[str] = mapped_column(String(32), nullable=False, default="eligible")
     outreach_exclude_reason: Mapped[str] = mapped_column(Text, nullable=True)
 
+    niche_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    growth_7d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    growth_30d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_intel_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    is_partner: Mapped[bool] = mapped_column(sa.Boolean(), default=False, nullable=False)
+
 
 class CreatorRelationship(Base):
     """Tracks outreach relationship lifecycle to prevent re-contact spam."""
@@ -298,6 +304,34 @@ class CreatorPost(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
+class CreatorMetricsDaily(Base):
+    __tablename__ = "creator_metrics_daily"
+    __table_args__ = (UniqueConstraint("creator_id", "snapshot_date", name="uq_creator_metrics_daily"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    creator_id: Mapped[int] = mapped_column(Integer, ForeignKey("creators.id"), nullable=False, index=True)
+    snapshot_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+
+    followers_est: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    posts_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    avg_like_est: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    avg_comment_est: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class CreatorSignal(Base):
+    __tablename__ = "creator_signals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    creator_id: Mapped[int] = mapped_column(Integer, ForeignKey("creators.id"), nullable=False, index=True)
+
+    signal_type: Mapped[str] = mapped_column(String(32), nullable=False)   # bio/post/hashtag
+    signal_text: Mapped[str] = mapped_column(Text, nullable=False)
+    weight: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 class ViralPatternReport(Base):
     __tablename__ = "viral_pattern_reports"

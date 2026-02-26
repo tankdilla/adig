@@ -195,16 +195,6 @@ def admin_creators(
     page_size = 200
     offset = (page - 1) * page_size
 
-    # query = (
-    #     db.query(Creator)
-    #     .filter(Creator.score >= min_score)
-    #     .filter(Creator.is_brand.is_(False))
-    #     .filter(Creator.is_spam.is_(False))
-    #     .filter(Creator.fraud_score < max_fraud)
-    #     # .filter(Creator.outreach_status == "eligible")
-    #     .order_by(Creator.score.desc(), Creator.created_at.desc())
-    # )
-
     query = (
         db.query(Creator)
         .filter(func.coalesce(Creator.score, 0) >= min_score)
@@ -866,6 +856,49 @@ def mark_engagement_executed(
     db.add(a)
     db.commit()
     return RedirectResponse(url="/admin/engagement?view=approved", status_code=303)
+
+@app.get("/admin/intel", response_class=HTMLResponse)
+def admin_intel(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    # Fastest growing (7d)
+    fastest = (
+        db.query(Creator)
+        .filter(Creator.growth_7d.isnot(None))
+        .order_by(Creator.growth_7d.desc())
+        .limit(50)
+        .all()
+    )
+
+    # Most niche-relevant
+    niche = (
+        db.query(Creator)
+        .filter(Creator.niche_score.isnot(None))
+        .order_by(Creator.niche_score.desc())
+        .limit(50)
+        .all()
+    )
+
+    # Similar to best partners (stored in fraud_flags.partner_similarity)
+    # Works even if you don't add a new column.
+    similar = (
+        db.query(Creator)
+        .order_by(
+            func.coalesce(
+                cast(Creator.fraud_flags["partner_similarity"].astext, sa.Float),
+                0.0
+            ).desc()
+        )
+        .limit(50)
+        .all()
+    )
+
+    return templates.TemplateResponse(
+        "intel.html",
+        {"request": request, "fastest": fastest, "niche": niche, "similar": similar},
+    )
 
 # --- Admin UI: Outreach ---
 
