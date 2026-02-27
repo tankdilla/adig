@@ -35,6 +35,15 @@
     </div>
   </div>
 
+  <p></p>
+
+  <form method="post" action="/admin/creators/import" enctype="multipart/form-data">
+    <div class="muted">Import creators (CSV)</div>
+    <div class="muted">csv format: handle, platform (default instagram), source (e.g. h2n_top_followers), notes (optional), followers_est (optional)</div>
+    <input type="file" name="file" accept=".csv" />
+    <button type="submit">Upload</button>
+  </form>
+
   <div class="card">
     <h3>Automation</h3>
     <div class="row">
@@ -80,7 +89,7 @@
           <td>
             <div><b><a href="/admin/creators/{{ c.id }}">@{{ c.handle }}</a></b></div>
             <div class="muted"><a href="/admin/graph?handle={{ c.handle }}">View graph</a></div>
-            <div class="muted"><a href="https://www.instagram.com/{{c.handle}}">Instagram</a></div>
+            <div class="muted"><a href="https://www.instagram.com/{{c.handle}}" target="_blank">Instagram</a></div>
           </td>
           <td>{{ c.score }}</td>
           <td>{{ c.followers_est or "—" }}</td>

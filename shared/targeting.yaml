@@ -39,40 +39,40 @@ instagram:
   # Hashtags we can use as discovery seeds (keep it safe; rotate and don’t over-hit any one tag)
   seed_hashtags:
     # Skin care
-    - smallbatchskincare
-    - naturalskincarejourney
-    - estheticianapproved
-    - dryskinroutine
-    - glowingskintips
-    - melaninskincare
-    - skincareroutinevideo
-    - skinbarrierrepair
-    - holisticskincare
-    - skincareroutineathome
+    # - smallbatchskincare
+    # - naturalskincarejourney
+    # - estheticianapproved
+    # - dryskinroutine
+    # - glowingskintips
+    # - melaninskincare
+    # - skincareroutinevideo
+    # - skinbarrierrepair
+    # - holisticskincare
+    # - skincareroutineathome
 
-    # Body care
-    - bodycarecommunity
-    - bodybutterlover
-    - sheaobsessed
-    - selfcarerituals
-    - luxuryselfcare
-    - skincareforblackwomen
-    - naturalbodycare
-    - cleanbodyproducts
-    - moisturizingroutine
-    - skinconfidence
+    # # Body care
+    # - bodycarecommunity
+    # - bodybutterlover
+    # - sheaobsessed
+    # - selfcarerituals
+    # - luxuryselfcare
+    # - skincareforblackwomen
+    # - naturalbodycare
+    # - cleanbodyproducts
+    # - moisturizingroutine
+    # - skinconfidence
 
-    # Wellness
-    - wellnessforwomen
-    - plantbasedwellness
-    - holisticlivingtips
-    - hormonebalance
-    - pcoswellness
-    - diabeteswellness
-    - faithwellness
-    - herbalwellness
-    - guthealthjourney
-    - naturalhealingtips
+    # # Wellness
+    # - wellnessforwomen
+    # - plantbasedwellness
+    # - holisticlivingtips
+    # - hormonebalance
+    # - pcoswellness
+    # - diabeteswellness
+    # - faithwellness
+    # - herbalwellness
+    # - guthealthjourney
+    # - naturalhealingtips
 
     # Smaller niche hash tags
     # - bodyoillayering
@@ -92,21 +92,21 @@ instagram:
     # - plantbasedwellnessjourney
 
     # Big brand hash tags
-    # - naturalskincare
-    # - bodybutter
-    # - sheabutter
-    # - mangobutter
-    # - bodyoil
-    # - selfcare
-    # - herbaltea
-    # - holistichealth
-    # - blackownedbusiness
-    # - blackgirlwellness
-    # - plantbased
-    # - pcos
-    # - diabeteats
-    # - faithandwellness
-    # - mississippi
+    - naturalskincare
+    - bodybutter
+    - sheabutter
+    - mangobutter
+    - bodyoil
+    - selfcare
+    - herbaltea
+    - holistichealth
+    - blackownedbusiness
+    - blackgirlwellness
+    - plantbased
+    - pcos
+    - diabeteats
+    - faithandwellness
+    - mississippi
 
   # Exclude list: brands, mega accounts, spam pages
   exclude:

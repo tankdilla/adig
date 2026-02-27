@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime, date
 from sqlalchemy import (
-    Column, String, Text, DateTime, Integer, Boolean, Enum, ForeignKey, UniqueConstraint, Float
+    Column, String, Text, Date, DateTime, Integer, Boolean, Enum, ForeignKey, UniqueConstraint, Float
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship, DeclarativeBase
 from sqlalchemy.dialects.postgresql import JSONB
@@ -230,7 +230,7 @@ class Creator(Base):
     growth_7d: Mapped[float | None] = mapped_column(Float, nullable=True)
     growth_30d: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_intel_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    is_partner: Mapped[bool] = mapped_column(sa.Boolean(), default=False, nullable=False)
+    is_partner: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
 class CreatorRelationship(Base):

@@ -1,8 +1,10 @@
 import os
 import logging
 import structlog
+import csv, io
+
 from celery import Celery
-from fastapi import FastAPI, Depends, Header, HTTPException, Request, Form, status
+from fastapi import FastAPI, Depends, Header, HTTPException, Request, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, and_, or_
@@ -223,9 +225,60 @@ def admin_creators(
         },
     )
 
-# make sure these models exist in your db_models import list
-# Creator, CreatorEdge, CreatorRelationship, OutreachDraft, OutreachEvent, CreatorPost
-# If your names differ, adjust accordingly.
+@app.post("/admin/creators/import", response_class=HTMLResponse)
+def admin_import_creators(
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_admin),
+):
+    raw = file.file.read()
+    text = raw.decode("utf-8", errors="ignore")
+    reader = csv.DictReader(io.StringIO(text))
+
+    created, updated, skipped = 0, 0, 0
+
+    for row in reader:
+        h = (row.get("handle") or "").strip().lstrip("@").lower()
+        if not h:
+            skipped += 1
+            continue
+
+        platform = (row.get("platform") or "instagram").strip().lower()
+        notes = (row.get("notes") or "").strip()
+        source = (row.get("source") or "h2n_top_followers").strip()
+
+        existing = db.query(Creator).filter(Creator.handle == h).first()
+        if existing:
+            # light update only
+            if notes:
+                existing.notes = (existing.notes or "")
+                if notes not in existing.notes:
+                    existing.notes = (existing.notes + "\n" + notes).strip()
+            ff = existing.fraud_flags or {}
+            ff.setdefault("sources", [])
+            if source and source not in ff["sources"]:
+                ff["sources"].append(source)
+            existing.fraud_flags = ff
+            updated += 1
+            continue
+
+        c = Creator(
+            handle=h,
+            platform=platform,
+            notes=notes or f"Imported from {source}",
+            created_at=datetime.utcnow(),
+            fraud_flags={"sources": [source]},
+        )
+        db.add(c)
+        created += 1
+
+    db.commit()
+
+    return templates.TemplateResponse(
+        "creators.html",
+        {"request": request, "created": created, "updated": updated, "skipped": skipped},
+    )
 
 @app.get("/admin/creators/{creator_id}", response_class=HTMLResponse)
 def admin_creator_profile(
