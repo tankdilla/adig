@@ -16,18 +16,18 @@ celery.conf.beat_schedule = {
         "task": "tasks.engagement_queue_daily",
         "schedule": crontab(hour=9, minute=10),
     },
-    "creator-discovery": {
-        "task": "tasks.creator_discovery_hashtags",
-        "schedule": crontab(minute=0, hour="*/6"),
-        "args": (200, 4),
-    },
-    "creator-related-expansion": {
-        "task": "tasks.creator_discovery_hashtags",
-        "schedule": crontab(minute=30, hour="*/12"),
-        "args": (200, 4),
-    },
-    "creator-intel": {
-        "task": "tasks.creator_intel_daily",
-        "schedule": crontab(minute=0, hour=3),
-    },
+    # "creator-discovery": {
+    #     "task": "tasks.creator_discovery_hashtags",
+    #     "schedule": crontab(minute=0, hour="*/6"),
+    #     "args": (200, 4),
+    # },
+    # "creator-related-expansion": {
+    #     "task": "tasks.creator_discovery_hashtags",
+    #     "schedule": crontab(minute=30, hour="*/12"),
+    #     "args": (200, 4),
+    # },
+    # "creator-intel": {
+    #     "task": "tasks.creator_intel_daily",
+    #     "schedule": crontab(minute=0, hour=3),
+    # },
 }

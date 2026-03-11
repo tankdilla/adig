@@ -103,7 +103,6 @@ def content_intel_daily():
         )
         raise
 
-
 @celery.task(name="tasks.build_outreach_batch")
 def build_outreach_batch(campaign_id: int, limit: int = 20):
     clear_contextvars()
@@ -443,28 +442,36 @@ def creator_intel_daily(limit: int = 300):
     """
     db = SessionLocal()
     try:
-        # prioritize likely-relevant creators
         rows = (
             db.query(Creator)
             .filter(func.coalesce(Creator.is_brand, False).is_(False))
             .filter(func.coalesce(Creator.is_spam, False).is_(False))
-            .order_by(Creator.created_at.desc())
+            .order_by(
+                Creator.last_intel_run_at.asc().nullsfirst(),
+                Creator.created_at.desc(),
+            )
             .limit(limit)
             .all()
         )
 
         async def _run():
-            for c in rows:
+            for i, c in enumerate(rows, start=1):
                 await snapshot_creator(db, c)
+
                 niche = await compute_niche_signals(db, c)
                 c.niche_score = niche
+
                 update_growth_fields(db, c)
+
                 # stash similarity into fraud_flags to avoid a new column for now
                 sim = best_partner_similarity(db, c)
                 ff = c.fraud_flags or {}
                 ff["partner_similarity"] = float(sim)
                 c.fraud_flags = ff
                 c.last_intel_run_at = datetime.utcnow()
+
+                if i % 25 == 0:
+                    db.flush()
 
         asyncio.run(_run())
         db.commit()
@@ -553,7 +560,6 @@ Score fit for H2N.
     finally:
         db.close()
 
-
 @celery.task(name="tasks.creator_discovery_hashtags")
 def creator_discovery_hashtags(limit: int = 200, rotate: int = 4):
     """Discover creators from hashtag pages and insert into creators table."""
@@ -574,7 +580,6 @@ def creator_discovery_hashtags(limit: int = 200, rotate: int = 4):
         raise
     finally:
         db.close()
-
 
 @celery.task(name="tasks.creator_graph_update")
 def creator_graph_update(limit_creators: int = 200, similarity_top_k: int = 25):

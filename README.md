@@ -1,421 +1,517 @@
-# Hello To Natural AI Growth Engine
+# Creator Intelligence & Outreach Platform
 
-AI-powered Instagram growth, creator discovery, and outreach automation for **Hello To Natural (H2N)**.
+*A creator discovery and outreach engine built for Hello To Natural*
 
-This system is designed to safely automate the parts of marketing that machines are good at while keeping **human approval for anything public-facing**.
+This project is a **creator discovery, intelligence, and outreach automation system** designed to help identify and collaborate with niche creators across Instagram.
 
-The goal is to scale:
+The system continuously discovers creators through hashtags, graph expansion, and audience signals, then ranks them based on niche relevance, growth, and similarity to successful partners.
 
-• Instagram growth
-• influencer partnerships
-• community engagement
-• content insights
-
-without using spammy automation or violating platform trust.
+The goal is to build a **high-quality database of micro-UGC creators** who are a strong fit for the Hello To Natural brand.
 
 ---
 
-# System Overview
+# Core Features
 
-The platform runs a set of AI agents and supporting services.
+## Creator Discovery Engine
 
-Core idea:
+Discovers creators through multiple strategies:
 
-Agents **think automatically**, but **actions require approval**.
+* Instagram hashtag discovery
+* Related creator expansion
+* Graph-based creator relationships
+* Audience seeding (planned)
+* Comment mining (planned)
 
-Pipeline:
-
-Discovery → Scoring → Insights → Drafts → Human Approval → Execution
-
----
-
-# High Level Architecture
-
-Docker containers run the system.
-
-Services include:
-
-API – FastAPI control plane and admin dashboard
-Worker – Celery workers running AI agents
-Scheduler – Celery Beat scheduled jobs
-Database – Postgres storing creators, drafts, metrics
-Redis – message broker and rate-limit store
-Ollama – optional local LLM inference
-
----
-
-# Directory Layout
+Discovery prioritizes **micro-creators** with follower counts between:
 
 ```
-h2n-agents
-│
-├── docker-compose.yml
-├── .env
-│
-├── services
-│   ├── api
-│   │   ├── Dockerfile
-│   │   └── app
-│   │       ├── main.py
-│   │       ├── db.py
-│   │       ├── settings.py
-│   │       ├── templates
-│   │       └── alembic
-│   │
-│   ├── worker
-│   │   ├── Dockerfile
-│   │   └── app
-│   │       ├── celery_app.py
-│   │       ├── tasks.py
-│   │       └── agents
-│   │
-│   └── scheduler
-│
-├── shared
-│   ├── db_models.py
-│   └── targeting.yaml
-│
-└── scripts
+3k – 30k followers
 ```
 
----
+These creators typically have:
 
-# Core AI Agents
-
-## Content Intelligence Agent
-
-Determines what content should be posted.
-
-Analyzes:
-
-• trending reels
-• competitor accounts
-• past H2N performance
-• seasonal wellness topics
-
-Outputs:
-
-• reel ideas
-• caption drafts
-• posting schedule
+* higher engagement
+* lower collaboration costs
+* more authentic content
+* stronger conversion rates
 
 ---
 
-# Creator Discovery Agent
+## Creator Intelligence Engine
 
-Discovers potential collaborators.
+The system automatically analyzes creators and generates intelligence signals.
 
-Sources:
+### Signals currently calculated
 
-• Instagram hashtag pages
-• manual imports
-• similar creator graph
+* niche relevance score
+* follower growth (7d / 30d)
+* partner similarity
+* fraud/spam indicators
+* brand vs creator classification
 
-Focus niches:
-
-• natural skincare
-• shea butter / body oils
-• herbal wellness
-• plant-based lifestyle
-• Black women wellness
-• Christian / faith-based living
-• natural hair community
+The intelligence system continuously updates as new data is discovered.
 
 ---
 
-# Creator Scoring System
+## Graph Expansion
 
-Creators receive a score from 0 to 100.
+Creators discovered via hashtags are used as **seed nodes**.
 
-Factors include:
+The system then expands outward by:
 
-Audience size
-Niche alignment
-Engagement signals
-Authenticity
-Brand safety
-Fraud signals
+* analyzing related creators
+* scanning posts for tagged users
+* identifying network connections
 
-Sweet spot:
-
-5k – 80k followers
-
-Creators above 250k are skipped.
+This builds a **creator graph** similar to how influencer platforms work.
 
 ---
 
-# Fraud Detection
+## Creator Admin Dashboard
 
-The system attempts to filter low-quality creators.
+Admin tools allow manual review of creators.
 
-Signals include:
-
-Low engagement relative to follower count
-Very few posts
-Spam keywords in profile
-Bot-like behavior
-
-Fraud reduces score or excludes the creator entirely.
-
----
-
-# Creator Graph
-
-The platform builds a graph of relationships between creators.
-
-Edges represent:
-
-Similarity
-Audience overlap
-Mentions
-Collaborations
-
-This enables:
-
-Finding creators similar to successful partners
-Avoiding overlapping audiences
-Discovering rising creators early
-
----
-
-# Outreach Automation
-
-The system generates collaboration drafts.
-
-Each outreach message is personalized using:
-
-Creator niche
-Recent content
-Campaign context
-
-Example message:
-
-Hello {creator},
-
-I really love your content around natural wellness.
-We run Hello To Natural, a plant-based body care brand focused on rituals and holistic living.
-
-We would love to send you something and collaborate if it feels aligned.
-
-No pressure at all.
-
-Mary & Darrell
-Hello To Natural
-
----
-
-# Safety System
-
-The platform is intentionally conservative.
-
-Two main protections:
-
-Kill Switch
-Action Mode
-
-Kill switch blocks all automated actions.
-
-Action modes:
-
-review – generate drafts only
-manual – export actions for manual use
-live – execute approved tasks
-
-Defaults are safe.
-
----
-
-# Environment Variables
-
-Example `.env`
+Routes:
 
 ```
-POSTGRES_DB=h2n
-POSTGRES_USER=h2n
-POSTGRES_PASSWORD=change_me
+/admin/creators
+/admin/creators/{creator_id}
+/admin/intel
+```
 
-REDIS_URL=redis://redis:6379/0
+These dashboards allow you to:
 
-ADMIN_TOKEN=your_secure_token
+* review creators
+* see growth signals
+* inspect niche relevance
+* view related creators
+* inspect outreach history
 
-ACTION_MODE=review
-KILL_SWITCH=true
+---
 
-MAX_ACTIONS_PER_HOUR=30
-MAX_DMS_PER_DAY=20
-MAX_COMMENTS_PER_DAY=40
+## Creator Data Stored
+
+Each creator includes fields like:
+
+* handle
+* platform
+* follower estimate
+* post count
+* niche tags
+* fraud flags
+* niche score
+* growth metrics
+* relationship graph edges
+* outreach history
+
+---
+
+# Architecture Overview
+
+```
+Discovery Tasks
+      │
+      ▼
+Creator Database
+      │
+      ▼
+Intel Engine
+      │
+      ▼
+Creator Ranking
+      │
+      ▼
+Outreach Campaigns
+```
+
+Key modules:
+
+```
+agents/
+  outreach/
+    discovery_engine.py
+    intel_engine.py
+    related_discovery.py
+
+tasks/
+  celery tasks for discovery & scoring
+
+routes/
+  admin dashboards
+
+db_models.py
 ```
 
 ---
 
-# Running the System
+# Technology Stack
 
-Build containers:
+Core technologies used in the system:
+
+### Backend
+
+* Python
+* FastAPI
+* SQLAlchemy
+* Alembic
+* Celery
+* Redis
+* PostgreSQL
+
+### Scraping
+
+* Playwright
+
+### Scheduling
+
+* Celery workers
+* Celery beat
+
+### Infrastructure
+
+* Docker
+* Docker Compose
+
+---
+
+# Setup
+
+## Start services
 
 ```
 docker compose up --build
 ```
 
-Run migrations:
+---
+
+## Run database migrations
 
 ```
 docker compose exec api alembic upgrade head
 ```
 
-Open admin dashboard:
+---
+
+## Run discovery manually
 
 ```
-http://localhost:8000
+tasks.creator_discovery_hashtags
 ```
 
 ---
 
-# Admin Interface
+## Run intel scoring
 
-The control plane provides several views.
-
-Dashboard
-Creators
-Outreach
-Engagement
-Logs
-Pattern Reports
-
-All actions require admin authentication.
+```
+tasks.creator_intel_daily
+```
 
 ---
 
-# Creator Discovery Workflow
+# Task Scheduling
 
-Typical weekly flow:
+Recommended schedule.
 
-Sunday
-Discover creators
+### Discovery
 
-Monday
-Score creators
+```
+every 6 hours
+```
 
-Tuesday
-Generate outreach drafts
+### Graph Expansion
 
-Wednesday
-Send approved outreach
+```
+every 12 hours
+```
 
-Friday
-Review results
+### Intelligence Engine
 
----
-
-# Exclusion Rules
-
-Creators are skipped when:
-
-Follower count above 250k
-Bio contains spam keywords
-Account appears to be a store or brand
-Very low activity
-
-This keeps the database high quality.
+```
+daily
+```
 
 ---
 
-# Database Models
+# Creator Target Profile
 
-Key entities include:
+The system is optimized to find **micro-UGC creators** who fit the Hello To Natural brand.
 
-Creators
-CreatorEdges
-CreatorRelationships
-PostDrafts
-EngagementQueue
-OutreachDrafts
-ViralPatternReports
+Target signals:
 
-These power analytics and automation.
+```
+followers: 3k – 30k
+```
 
----
+Content themes:
 
-# Example Automation Pipeline
-
-Discovery
-
-↓
-
-Fraud detection
-
-↓
-
-Scoring
-
-↓
-
-Similarity expansion
-
-↓
-
-Outreach draft generation
-
-↓
-
-Human approval
-
-↓
-
-Execution
+* natural skincare
+* body care
+* holistic wellness
+* plant based living
+* faith + wellness
+* PCOS / metabolic health
+* herbal tea
+* self care
 
 ---
 
-# Content Insights
+# Security
 
-The system also analyzes reels and captions.
+The scraper may optionally use an Instagram authenticated session.
 
-Outputs:
+If used, the storage state file:
 
-Common hooks
-Typical reel length
-Best performing CTAs
+```
+shared/ig_storage_state.json
+```
 
-This improves future content.
+must **never be committed to Git**.
 
----
+Add to `.gitignore`:
 
-# Development Workflow
-
-When making code changes:
-
-1. Update models
-2. Create migration
-3. Update worker agents
-4. Test locally
-5. Commit
+```
+shared/ig_storage_state.json
+```
 
 ---
 
-# Future Improvements
+# Roadmap
 
-Potential next upgrades:
+Below is the prioritized roadmap for future upgrades.
 
-TikTok creator discovery
-YouTube Shorts ingestion
-Pinterest discovery
-Audience demographic modeling
-Creator performance tracking
-Automated giveaway coordination
+The focus is on **improving creator discovery quality and campaign success rates**.
 
 ---
 
-# Notes
+# Phase 1 — Discovery Improvements (Highest Priority)
 
-This system is designed to help grow Hello To Natural **organically and authentically**.
+Goal: dramatically increase the quality of discovered creators.
 
-Automation supports the brand voice but does not replace it.
+### Audience Seeding
 
-Mary and Darrell remain the voice of the brand.
+Seed creators from:
+
+* Hello To Natural followers
+* commenters on brand posts
+* creators mentioning brand hashtags
+
+This often produces **the highest quality creator pool**.
 
 ---
 
-# Maintainers
+### Comment Mining
 
-Hello To Natural
+Extract creators from:
 
-Built for internal growth operations.
+* comments on niche posts
+* commenters interacting with related creators
+
+Commenters are often:
+
+* smaller creators
+* highly engaged
+* open to collaborations
+
+---
+
+### Hashtag Auto-Expansion
+
+Automatically learn new niche hashtags by analyzing posts that score highly.
+
+Example:
+
+```
+#melaninskincare
+#bodybutterlover
+#selfcareclub
+#pcosjourney
+```
+
+These hashtags then feed back into discovery.
+
+---
+
+# Phase 2 — Creator Intelligence
+
+Goal: improve ranking and prioritization.
+
+### Engagement Estimation
+
+Estimate engagement using:
+
+```
+likes
+comments
+follower ratios
+```
+
+This helps identify creators with **authentic audiences**.
+
+---
+
+### Growth Detection
+
+Highlight creators with rapid follower growth.
+
+Signals:
+
+```
+7d growth
+14d growth
+30d growth
+```
+
+Fast-growing creators are often ideal partnership targets.
+
+---
+
+### UGC Probability Scoring
+
+Predict whether a creator is likely to accept brand collaborations.
+
+Signals include:
+
+```
+bio keywords
+previous brand content
+UGC mentions
+```
+
+---
+
+# Phase 3 — Graph Intelligence
+
+Goal: build a strong creator network graph.
+
+### Creator Relationship Graph
+
+Track:
+
+```
+mentions
+tags
+shared hashtags
+collaborations
+```
+
+This allows discovery of entire creator communities.
+
+---
+
+### Community Clustering
+
+Identify clusters such as:
+
+* natural skincare creators
+* wellness influencers
+* PCOS educators
+* herbal wellness communities
+
+Clusters can become targeted outreach segments.
+
+---
+
+# Phase 4 — Outreach Automation
+
+Goal: turn discovery into partnerships.
+
+### Campaign Builder
+
+Create outreach campaigns targeting:
+
+```
+creator niches
+follower bands
+growth rate
+```
+
+---
+
+### AI-Generated Outreach Messages
+
+Use creator context to generate personalized outreach.
+
+Example:
+
+```
+Hi [creator],
+
+We love your content about [topic].
+We think you'd be a great fit for our [product].
+
+Would you be interested in collaborating?
+```
+
+---
+
+### Response Tracking
+
+Track creator responses.
+
+Statuses:
+
+```
+contacted
+replied
+interested
+declined
+partner
+```
+
+---
+
+# Phase 5 — Creator Intelligence Platform
+
+Goal: evolve into a full creator analytics platform.
+
+### Similar Creator Discovery
+
+Find creators similar to successful partners.
+
+---
+
+### Content Analysis
+
+Analyze creator content themes automatically.
+
+---
+
+### Trend Detection
+
+Identify trending topics within the niche.
+
+---
+
+### Campaign Performance Tracking
+
+Measure:
+
+```
+traffic
+sales
+engagement
+```
+
+from creator collaborations.
+
+---
+
+# Long-Term Vision
+
+The long-term goal is to build a **creator intelligence system** that:
+
+* continuously discovers niche creators
+* ranks them by brand fit
+* identifies fast-growing influencers
+* builds a graph of creator communities
+* automates outreach and partnership management
+
+This will allow Hello To Natural to build **a powerful creator ecosystem** that drives organic brand growth.
+
+---
+
+# License
+
+Internal project for Hello To Natural.
+
+---

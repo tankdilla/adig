@@ -1,2 +1,5 @@
 .env
 agent_logs/
+shared/ig_storage_state.json
+**/ig_storage_state.json
+h2n_followers.csv

@@ -99,8 +99,8 @@ async def discover_from_hashtags(db: Session, limit: int = 200, rotate: int = 4)
     sample = random.sample(tags, k=min(int(rotate), len(tags)))
 
     follower_min = _get_int("follower_min", 1_500)
-    follower_max = _get_int("follower_max", 35_000)
-    hard_max_followers = _get_int("hard_max_followers", 150_000)
+    follower_max = _get_int("follower_max", 350_000)
+    hard_max_followers = _get_int("hard_max_followers", 1_500_000)
 
     oversample_factor = _get_float("oversample_factor", 6.0)
     per_hashtag_posts = _get_int(
@@ -127,8 +127,10 @@ async def discover_from_hashtags(db: Session, limit: int = 200, rotate: int = 4)
         "updated": 0,
     }
 
+    handle_stats = {}
+
     # 1) Discover candidate handles (oversample so we can filter down to niche)
-    handles = await discover_handles(
+    handles, handle_stats = await discover_handles(
         seed_hashtags=sample,
         per_hashtag_posts=per_hashtag_posts,
         max_total_handles=max_total_handles,
@@ -299,6 +301,7 @@ async def discover_from_hashtags(db: Session, limit: int = 200, rotate: int = 4)
         "skipped": skipped,
         "tags": sample,
         "handles_found": len(handles),
+        "handle_stats": handle_stats,
         "enriched_count": len(enriched),
         "excluded_seen": excluded_seen,
         "excluded_created": excluded_created,

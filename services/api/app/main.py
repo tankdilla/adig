@@ -7,7 +7,7 @@ from celery import Celery
 from fastapi import FastAPI, Depends, Header, HTTPException, Request, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, and_, or_
+from sqlalchemy import Float, func, cast, and_, or_
 from sqlalchemy.orm import Session
 from datetime import datetime, date, time, timedelta
 
@@ -275,9 +275,39 @@ def admin_import_creators(
 
     db.commit()
 
+    min_score = 50
+    max_fraud = 70
+
+    query = (
+        db.query(Creator)
+        .filter(func.coalesce(Creator.score, 0) >= min_score)
+        .filter(func.coalesce(Creator.is_brand, False).is_(False))
+        .filter(func.coalesce(Creator.is_spam, False).is_(False))
+        .filter(func.coalesce(Creator.fraud_score, 0) < max_fraud)
+        .order_by(Creator.created_at.desc(), Creator.score.desc().nullslast())
+    )
+
+    # total = query.count()
+    total = query.order_by(None).count()
+    creators = query.offset(offset).limit(page_size).all()
+    page = 1
+    page_size = 200
+    offset = (page - 1) * page_size
+
     return templates.TemplateResponse(
+        # "creators.html",
+        # {"request": request, "created": created, "updated": updated, "skipped": skipped},
         "creators.html",
-        {"request": request, "created": created, "updated": updated, "skipped": skipped},
+        {
+            "request": request,
+            "user": user,
+            "creators": creators,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "min_score": min_score,
+            "max_fraud": max_fraud,
+        }
     )
 
 @app.get("/admin/creators/{creator_id}", response_class=HTMLResponse)
@@ -940,7 +970,7 @@ def admin_intel(
         db.query(Creator)
         .order_by(
             func.coalesce(
-                cast(Creator.fraud_flags["partner_similarity"].astext, sa.Float),
+                cast(Creator.fraud_flags["partner_similarity"].astext, Float),
                 0.0
             ).desc()
         )

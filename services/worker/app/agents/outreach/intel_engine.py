@@ -3,6 +3,7 @@ import re
 from datetime import datetime, timedelta, date
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.dialects.postgresql import insert
 
 from db_models import Creator, CreatorMetricsDaily, CreatorSignal
 from agents.outreach.discovery_engine import _extract_profile_snapshot, _extract_profile_shortcodes, _RE_POST_SHORTCODE
@@ -33,29 +34,35 @@ def _keyword_score(text: str, keywords: list[str]) -> float:
     return score
 
 async def snapshot_creator(db: Session, creator: Creator) -> None:
-    """Fetch profile html, store a daily snapshot row (for growth)."""
+    """Fetch profile html, store/update a daily snapshot row safely."""
     url = f"https://www.instagram.com/{creator.handle}/"
     html = await fetch_page_html(url)
     snap = _extract_profile_snapshot(html, creator.handle)
 
     today = date.today()
-    row = (
-        db.query(CreatorMetricsDaily)
-        .filter(CreatorMetricsDaily.creator_id == creator.id)
-        .filter(CreatorMetricsDaily.snapshot_date == today)
-        .first()
+
+    stmt = insert(CreatorMetricsDaily).values(
+        creator_id=creator.id,
+        snapshot_date=today,
+        followers_est=snap.followers,
+        posts_count=snap.posts,
+        avg_like_est=None,
+        avg_comment_est=None,
+        created_at=datetime.utcnow(),
     )
-    if not row:
-        row = CreatorMetricsDaily(
-            creator_id=creator.id,
-            snapshot_date=today,
-            followers_est=snap.followers,
-            posts_count=snap.posts,
-        )
-        db.add(row)
-    else:
-        row.followers_est = snap.followers
-        row.posts_count = snap.posts
+
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["creator_id", "snapshot_date"],
+        set_={
+            "followers_est": snap.followers,
+            "posts_count": snap.posts,
+            "avg_like_est": None,
+            "avg_comment_est": None,
+            # leave created_at alone if you want; or update it too
+        },
+    )
+
+    db.execute(stmt)
 
 def _growth_pct(new: int | None, old: int | None) -> float | None:
     if not new or not old or old <= 0:

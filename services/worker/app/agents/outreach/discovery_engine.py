@@ -127,15 +127,34 @@ def _is_spammy(handle: str, bio: str) -> bool:
         return True
     return False
 
+# def _looks_like_brand(bio: str, external_url: str) -> bool:
+#     b = (bio or "").lower()
+#     if external_url and any(t in b for t in ["shop", "order", "store", "website"]):
+#         return True
+#     if ("shop" in b or "store" in b or "order" in b) and ("link in bio" in b or "shipping" in b):
+#         return True
+#     return False
 
 def _looks_like_brand(bio: str, external_url: str) -> bool:
     b = (bio or "").lower()
-    if external_url and any(t in b for t in ["shop", "order", "store", "website"]):
-        return True
-    if ("shop" in b or "store" in b or "order" in b) and ("link in bio" in b or "shipping" in b):
-        return True
-    return False
 
+    strong_brand_signals = [
+        "official brand", "est.", "shipping", "wholesale",
+        "we sell", "shop now", "orders open", "drop", "inventory"
+    ]
+    creator_signals = [
+        "ugc", "content creator", "digital creator",
+        "collabs", "pr packages", "brand deals"
+    ]
+
+    if any(s in b for s in creator_signals):
+        return False
+
+    # external_url alone is NOT enough
+    if any(s in b for s in strong_brand_signals):
+        return True
+
+    return False
 
 def _looks_like_login_wall(html: str) -> bool:
     lower = (html or "").lower()
@@ -161,6 +180,7 @@ async def discover_handles(
     handles: list[str] = []
     seen_posts: set[str] = set()
     sem = asyncio.Semaphore(max_concurrency)
+    stats = {"hashtags_seen": 0, "login_walls": 0, "shortcodes_total": 0, "posts_crawled": 0}
 
     async def _fetch_post_handles(sc: str) -> list[str]:
         if sc in seen_posts:
@@ -172,7 +192,9 @@ async def discover_handles(
             post_html = await _cached_fetch(post_url)
 
         if _looks_like_login_wall(post_html):
+            stats["login_walls"] += 1
             return []
+        stats["posts_crawled"] += 1
 
         found: list[str] = []
 
@@ -191,6 +213,7 @@ async def discover_handles(
         return found
 
     for tag in seed_hashtags:
+        stats["hashtags_seen"] += 1
         tag = (tag or "").strip().lstrip("#")
         if not tag:
             continue
@@ -200,10 +223,12 @@ async def discover_handles(
             html = await _cached_fetch(hashtag_url)
 
         if _looks_like_login_wall(html):
+            stats["login_walls"] += 1
             continue
 
         # Pull more than needed, then shuffle to avoid always top posts
         shortcodes = _unique_shortcodes(_RE_POST_SHORTCODE.findall(html))
+        stats["shortcodes_total"] += len(shortcodes)
         if not shortcodes:
             continue
 
@@ -223,8 +248,9 @@ async def discover_handles(
 
         if len(handles) >= max_total_handles:
             break
-
-    return _unique_handles(handles)[:max_total_handles]
+    
+    result = _unique_handles(handles)[:max_total_handles]
+    return result, stats
 
 async def discover_related_handles(
     seed_handles: Sequence[str],
