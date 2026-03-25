@@ -381,6 +381,10 @@ class OutreachDraft(Base):
 
     followups_sent: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
+    sequence_name: Mapped[str] = mapped_column(String(64), nullable=True)
+    sequence_step: Mapped[str] = mapped_column(String(32), nullable=True)
+    due_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
 class OutreachCampaign(Base):
     __tablename__ = "outreach_campaigns"
 

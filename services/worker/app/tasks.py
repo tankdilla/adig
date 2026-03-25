@@ -17,6 +17,7 @@ from agents.broll.pexels import get_broll_for_keywords
 from agents.content_intel.shoot_pack import generate_shoot_pack
 from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm.attributes import flag_modified
 
 from db_models import EngagementAction, EngagementActionType, EngagementStatus
 from db_models import PostDraft
@@ -25,6 +26,7 @@ from db_models import Creator, OutreachDraft, OutreachCampaign, ApprovalStatus, 
 from agents.llm import draft
 
 from agents.outreach.discovery import discover_from_hashtags
+from agents.outreach.phase1_discovery import discover_phase1, score_candidate
 from agents.outreach.personalization import build_personalized_dm
 from agents.outreach.fraud_detection import assess_fraud, is_excludable
 from agents.outreach.intel_engine import snapshot_creator, update_growth_fields, compute_niche_signals, best_partner_similarity
@@ -70,6 +72,24 @@ Consider:
 """
 
 log = structlog.get_logger(__name__)
+
+
+def _phase1_default_queries() -> list[str]:
+    return [
+        "natural skincare influencers",
+        "herbal wellness creators",
+        "christian lifestyle creators",
+        "black wellness creators",
+    ]
+
+
+def _append_unique_lines(existing: str | None, additions: list[str]) -> str | None:
+    lines = [line.strip() for line in (existing or "").splitlines() if line.strip()]
+    for item in additions:
+        item = (item or "").strip()
+        if item and item not in lines:
+            lines.append(item)
+    return "\n".join(lines)[:2000] if lines else None
 
 @celery.task(name="tasks.content_intel_daily")
 def content_intel_daily():
@@ -247,7 +267,7 @@ def build_engagement_queue():
         for i, row in enumerate(pending):
             target = {
                 "caption": row.target_caption or "",
-                "author": row.target_author or "",
+                "author": row.target_handle or "",
                 "url": row.target_url or "",
                 "topic_hint": "natural wellness, skincare, herbal living",
             }
@@ -553,6 +573,116 @@ Score fit for H2N.
         log.info("task_finished", updated=updated)
         return {"ok": True, "updated": updated}
 
+    except Exception as e:
+        db.rollback()
+        log.exception("task_failed", error=str(e))
+        raise
+    finally:
+        db.close()
+
+
+
+@celery.task(name="tasks.creator_discovery_phase1")
+def creator_discovery_phase1(limit: int = 100, queries: list[str] | None = None, max_google_results: int = 5):
+    """Discover creators from YouTube search plus curated web lists and apply a deterministic score."""
+    clear_contextvars()
+    task_id = getattr(creator_discovery_phase1.request, "id", None)
+    bind_contextvars(task="creator_discovery_phase1", task_id=task_id, limit=limit)
+    log.info("task_started", limit=limit, queries=queries, max_google_results=max_google_results)
+
+    db = SessionLocal()
+    try:
+        normalized_queries = [q.strip() for q in (queries or _phase1_default_queries()) if q and q.strip()]
+        candidates = discover_phase1(queries=normalized_queries, max_google_results=max_google_results)
+
+        created = 0
+        updated = 0
+        skipped = 0
+
+        ranked = []
+        for candidate in candidates:
+            score, reasons = score_candidate(candidate)
+            ranked.append((score, reasons, candidate))
+
+        ranked.sort(key=lambda item: (item[0], item[2].confidence_score, len(item[2].source_platforms)), reverse=True)
+
+        for score, reasons, candidate in ranked:
+            if created >= int(limit) and not db.query(Creator).filter(Creator.handle == candidate.handle).first():
+                skipped += 1
+                continue
+
+            existing = db.query(Creator).filter(Creator.handle == candidate.handle).first()
+            tags_csv = ", ".join(sorted(candidate.niche_tags))[:1500] or None
+            note_lines = [
+                f"Phase 1 discovery score: {score}",
+                f"Discovery reasons: {', '.join(reasons)}" if reasons else "Discovery reasons: none",
+                f"Discovery sources: {', '.join(sorted(candidate.source_platforms))}" if candidate.source_platforms else "Discovery sources: none",
+            ]
+            if candidate.emails:
+                note_lines.append(f"Emails: {', '.join(sorted(candidate.emails))}")
+            if candidate.website_url:
+                note_lines.append(f"Website: {candidate.website_url}")
+            note_lines.extend(candidate.notes[:4])
+
+            discovery_meta = {
+                "phase1_sources": sorted(candidate.source_urls),
+                "phase1_source_platforms": sorted(candidate.source_platforms),
+                "phase1_reasons": reasons,
+                "phase1_confidence": float(candidate.confidence_score or 0.0),
+                "phase1_emails": sorted(candidate.emails),
+                "phase1_website_url": candidate.website_url,
+            }
+
+            if existing:
+                existing.score = max(existing.score or 0, score)
+                if tags_csv:
+                    existing_tags = {t.strip() for t in (existing.niche_tags or '').split(',') if t.strip()}
+                    existing_tags |= {t.strip() for t in tags_csv.split(',') if t.strip()}
+                    existing.niche_tags = ", ".join(sorted(existing_tags))[:1500]
+                if candidate.followers_est is not None:
+                    existing.followers_est = max(existing.followers_est or 0, candidate.followers_est)
+                ff = existing.fraud_flags or {}
+                ff["phase1_sources"] = sorted(set(ff.get("phase1_sources", [])) | set(candidate.source_urls))
+                ff["phase1_source_platforms"] = sorted(set(ff.get("phase1_source_platforms", [])) | set(candidate.source_platforms))
+                ff["phase1_reasons"] = sorted(set(ff.get("phase1_reasons", [])) | set(reasons))
+                ff["phase1_confidence"] = max(float(ff.get("phase1_confidence", 0.0)), float(candidate.confidence_score or 0.0))
+                ff["phase1_emails"] = sorted(set(ff.get("phase1_emails", [])) | set(candidate.emails))
+                if candidate.website_url and not ff.get("phase1_website_url"):
+                    ff["phase1_website_url"] = candidate.website_url
+                ff.setdefault("discovery_review_status", "pending")
+                existing.fraud_flags = dict(ff)
+                flag_modified(existing, "fraud_flags")
+                existing.notes = _append_unique_lines(existing.notes, note_lines)
+                updated += 1
+                continue
+
+            creator = Creator(
+                handle=candidate.handle,
+                platform="instagram",
+                followers_est=candidate.followers_est,
+                niche_tags=tags_csv,
+                score=score,
+                notes="".join(note_lines)[:2000],
+                created_at=datetime.utcnow(),
+                fraud_flags={**discovery_meta, "discovery_review_status": "pending"},
+            )
+            fraud_score, flags = assess_fraud(creator)
+            creator.fraud_score = fraud_score
+            creator.fraud_flags = {**(creator.fraud_flags or {}), **(flags or {})}
+            db.add(creator)
+            created += 1
+
+        db.commit()
+        result = {
+            "ok": True,
+            "queries": normalized_queries,
+            "discovered": len(candidates),
+            "created": created,
+            "updated": updated,
+            "skipped": skipped,
+        }
+        log.info("task_finished", result=result)
+        return result
     except Exception as e:
         db.rollback()
         log.exception("task_failed", error=str(e))

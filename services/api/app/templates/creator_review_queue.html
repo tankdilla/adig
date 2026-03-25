@@ -1,0 +1,241 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Creator Review Queue • H2N</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; max-width: 1180px; margin: 0 auto; }
+    a { color: inherit; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; margin: 12px 0; }
+    .muted { color:#666; font-size: 14px; }
+    .row { display:flex; gap: 10px; flex-wrap: wrap; align-items: start; }
+    .pill { display:inline-block; padding:6px 10px; border-radius: 999px; background:#f2f2f2; font-size: 12px; text-decoration:none; }
+    .pill.good { background:#e9f8ee; }
+    .pill.bad { background:#fdecec; }
+    .pill.warn { background:#fff4dd; }
+    button { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; background: white; cursor:pointer; }
+    textarea, input, select { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; }
+    .grid { display:grid; grid-template-columns: 42px 1.2fr 1fr; gap: 14px; }
+    .bulkbar { display:grid; grid-template-columns: 1.2fr 180px 1.3fr auto; gap:10px; align-items:center; }
+    .filter-grid { display:grid; grid-template-columns: repeat(5, minmax(140px, 1fr)) auto; gap:10px; align-items:end; }
+    .field label { display:block; font-size:12px; color:#666; margin-bottom:6px; }
+    .field input, .field select { width:100%; box-sizing:border-box; }
+    ul { margin-top: 6px; }
+    .checkbox-wrap { display:flex; justify-content:center; padding-top: 8px; }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+      .checkbox-wrap { justify-content:flex-start; padding-top: 0; }
+      .bulkbar, .filter-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div>
+      <h2>Creator Review Queue</h2>
+      <div class="muted">Review discovered creators before outreach. Total={{ total }}</div>
+    </div>
+    <div class="row">
+      <a href="/admin" class="pill">← Admin</a>
+      <a href="/admin/creators" class="pill">Creators</a>
+      <a href="/admin/logs" class="pill">Logs</a>
+    </div>
+  </div>
+
+  <div class="card row" style="align-items:center;">
+    <span class="muted">Status:</span>
+    <a class="pill {% if status == 'pending' %}warn{% endif %}" href="/admin/creators/review?status=pending{% if filters.min_score is not none %}&min_score={{ filters.min_score }}{% endif %}{% if filters.source_type != 'any' %}&source_type={{ filters.source_type }}{% endif %}{% if filters.email_state != 'any' %}&email_state={{ filters.email_state }}{% endif %}{% if filters.confidence_band != 'any' %}&confidence_band={{ filters.confidence_band }}{% endif %}{% if filters.sort_by != 'newest' %}&sort_by={{ filters.sort_by }}{% endif %}">Pending</a>
+    <a class="pill {% if status == 'approved' %}good{% endif %}" href="/admin/creators/review?status=approved{% if filters.min_score is not none %}&min_score={{ filters.min_score }}{% endif %}{% if filters.source_type != 'any' %}&source_type={{ filters.source_type }}{% endif %}{% if filters.email_state != 'any' %}&email_state={{ filters.email_state }}{% endif %}{% if filters.confidence_band != 'any' %}&confidence_band={{ filters.confidence_band }}{% endif %}{% if filters.sort_by != 'newest' %}&sort_by={{ filters.sort_by }}{% endif %}">Approved</a>
+    <a class="pill {% if status == 'rejected' %}bad{% endif %}" href="/admin/creators/review?status=rejected{% if filters.min_score is not none %}&min_score={{ filters.min_score }}{% endif %}{% if filters.source_type != 'any' %}&source_type={{ filters.source_type }}{% endif %}{% if filters.email_state != 'any' %}&email_state={{ filters.email_state }}{% endif %}{% if filters.confidence_band != 'any' %}&confidence_band={{ filters.confidence_band }}{% endif %}{% if filters.sort_by != 'newest' %}&sort_by={{ filters.sort_by }}{% endif %}">Rejected</a>
+    <a class="pill" href="/admin/creators/review?status=all{% if filters.min_score is not none %}&min_score={{ filters.min_score }}{% endif %}{% if filters.source_type != 'any' %}&source_type={{ filters.source_type }}{% endif %}{% if filters.email_state != 'any' %}&email_state={{ filters.email_state }}{% endif %}{% if filters.confidence_band != 'any' %}&confidence_band={{ filters.confidence_band }}{% endif %}{% if filters.sort_by != 'newest' %}&sort_by={{ filters.sort_by }}{% endif %}">All</a>
+  </div>
+
+  <form method="get" action="/admin/creators/review" class="card">
+    <input type="hidden" name="status" value="{{ status }}" />
+    <div class="filter-grid">
+      <div class="field">
+        <label for="min_score">Minimum score</label>
+        <input id="min_score" type="number" name="min_score" min="0" placeholder="Any" value="{{ filters.min_score if filters.min_score is not none else '' }}" />
+      </div>
+      <div class="field">
+        <label for="source_type">Source type</label>
+        <select id="source_type" name="source_type">
+          <option value="any" {% if filters.source_type == 'any' %}selected{% endif %}>Any source</option>
+          <option value="youtube" {% if filters.source_type == 'youtube' %}selected{% endif %}>YouTube</option>
+          <option value="web" {% if filters.source_type == 'web' %}selected{% endif %}>Web list</option>
+          <option value="blog" {% if filters.source_type == 'blog' %}selected{% endif %}>Blog</option>
+          <option value="podcast" {% if filters.source_type == 'podcast' %}selected{% endif %}>Podcast</option>
+          <option value="newsletter" {% if filters.source_type == 'newsletter' %}selected{% endif %}>Newsletter</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="email_state">Email present</label>
+        <select id="email_state" name="email_state">
+          <option value="any" {% if filters.email_state == 'any' %}selected{% endif %}>Any</option>
+          <option value="yes" {% if filters.email_state == 'yes' %}selected{% endif %}>Has email</option>
+          <option value="no" {% if filters.email_state == 'no' %}selected{% endif %}>No email</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="confidence_band">Confidence band</label>
+        <select id="confidence_band" name="confidence_band">
+          <option value="any" {% if filters.confidence_band == 'any' %}selected{% endif %}>Any</option>
+          <option value="high" {% if filters.confidence_band == 'high' %}selected{% endif %}>High</option>
+          <option value="medium" {% if filters.confidence_band == 'medium' %}selected{% endif %}>Medium</option>
+          <option value="low" {% if filters.confidence_band == 'low' %}selected{% endif %}>Low</option>
+          <option value="unknown" {% if filters.confidence_band == 'unknown' %}selected{% endif %}>Unknown</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="sort_by">Sort</label>
+        <select id="sort_by" name="sort_by">
+          <option value="newest" {% if filters.sort_by == 'newest' %}selected{% endif %}>Newest first</option>
+          <option value="score_desc" {% if filters.sort_by == 'score_desc' %}selected{% endif %}>Score high to low</option>
+          <option value="score_asc" {% if filters.sort_by == 'score_asc' %}selected{% endif %}>Score low to high</option>
+          <option value="confidence_desc" {% if filters.sort_by == 'confidence_desc' %}selected{% endif %}>Confidence high to low</option>
+          <option value="handle_asc" {% if filters.sort_by == 'handle_asc' %}selected{% endif %}>Handle A to Z</option>
+        </select>
+      </div>
+      <div class="row" style="align-items:end;">
+        <button type="submit">Apply filters</button>
+        <a class="pill" href="/admin/creators/review?status={{ status }}">Clear</a>
+      </div>
+    </div>
+  </form>
+
+  <form method="post" action="/admin/creators/review/bulk">
+    <input type="hidden" name="status" value="{{ status }}" />
+    <input type="hidden" name="page" value="{{ page }}" />
+    <input type="hidden" name="min_score" value="{{ filters.min_score if filters.min_score is not none else '' }}" />
+    <input type="hidden" name="source_type" value="{{ filters.source_type }}" />
+    <input type="hidden" name="email_state" value="{{ filters.email_state }}" />
+    <input type="hidden" name="confidence_band" value="{{ filters.confidence_band }}" />
+    <input type="hidden" name="sort_by" value="{{ filters.sort_by }}" />
+
+    <div class="card bulkbar">
+      <div>
+        <div><b>Bulk review mode</b></div>
+        <div class="muted">Select creators on this page, then approve, reject, or reset them together.</div>
+      </div>
+      <select name="decision" aria-label="Bulk review decision">
+        <option value="approved">Approve selected</option>
+        <option value="rejected">Reject selected</option>
+        <option value="pending">Reset selected to pending</option>
+      </select>
+      <input name="reason" placeholder="Shared note for selected creators" />
+      <button type="submit">Apply bulk action</button>
+    </div>
+
+    {% for row in rows %}
+      {% set c = row.creator %}
+      {% set meta = row.meta %}
+      <div class="card grid">
+        <div class="checkbox-wrap">
+          <input type="checkbox" name="creator_ids" value="{{ c.id }}" aria-label="Select @{{ c.handle }}" />
+        </div>
+
+        <div>
+          <div class="row" style="justify-content:space-between; align-items:center;">
+            <div>
+              <div style="font-size: 20px; font-weight: 700;">@{{ c.handle }}</div>
+              <div class="muted">{{ c.platform }}{% if c.followers_est %} • {{ c.followers_est }} est. followers{% endif %}</div>
+            </div>
+            <div class="row">
+              <span class="pill">Score {{ meta.discovery_score or 0 }}</span>
+              <span class="pill {% if meta.confidence_band == 'high' %}good{% elif meta.confidence_band == 'low' %}bad{% else %}warn{% endif %}">Confidence {{ meta.confidence_band }}</span>
+              <span class="pill {% if meta.review_status == 'approved' %}good{% elif meta.review_status == 'rejected' %}bad{% else %}warn{% endif %}">{{ meta.review_status }}</span>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:10px;">
+            {% if meta.website_url %}<a class="pill" href="{{ meta.website_url }}" target="_blank" rel="noreferrer">Website</a>{% endif %}
+            {% for source_url in meta.source_urls %}
+              <a class="pill" href="{{ source_url }}" target="_blank" rel="noreferrer">Source {{ loop.index }}</a>
+            {% endfor %}
+          </div>
+
+          <div class="row" style="margin-top:12px;">
+            {% for reason in meta.reasons %}<span class="pill">{{ reason }}</span>{% endfor %}
+            {% for tag in (c.niche_tags or '').split(',') if tag.strip() %}<span class="pill">{{ tag.strip() }}</span>{% endfor %}
+            {% for platform in meta.source_platforms %}<span class="pill">{{ platform }}</span>{% endfor %}
+          </div>
+
+          {% if meta.emails %}
+            <div class="muted" style="margin-top:10px;">Contact signals: {{ meta.emails|join(', ') }}</div>
+          {% endif %}
+          {% if meta.review_reason %}
+            <div class="muted" style="margin-top:8px;">Review note: {{ meta.review_reason }}</div>
+          {% endif %}
+          {% if meta.reviewed_by %}
+            <div class="muted">Last reviewed by {{ meta.reviewed_by }}{% if meta.reviewed_at %} at {{ meta.reviewed_at }}{% endif %}</div>
+          {% endif %}
+        </div>
+
+        <div>
+          <div class="muted"><b>Why this creator surfaced</b></div>
+          <ul>
+            {% for line in (c.notes or '').splitlines()[:6] %}
+              {% if line.strip() %}<li class="muted">{{ line }}</li>{% endif %}
+            {% endfor %}
+          </ul>
+
+          <div class="row" style="margin-top:10px;">
+            <form method="post" action="/admin/creators/{{ c.id }}/review">
+              <input type="hidden" name="decision" value="approved" />
+              <input type="hidden" name="status" value="{{ status }}" />
+              <input type="hidden" name="page" value="{{ page }}" />
+              <input type="hidden" name="min_score" value="{{ filters.min_score if filters.min_score is not none else '' }}" />
+              <input type="hidden" name="source_type" value="{{ filters.source_type }}" />
+              <input type="hidden" name="email_state" value="{{ filters.email_state }}" />
+              <input type="hidden" name="confidence_band" value="{{ filters.confidence_band }}" />
+              <input type="hidden" name="sort_by" value="{{ filters.sort_by }}" />
+              <input name="reason" placeholder="Optional note" size="16" />
+              <button type="submit">Approve</button>
+            </form>
+            <form method="post" action="/admin/creators/{{ c.id }}/review">
+              <input type="hidden" name="decision" value="rejected" />
+              <input type="hidden" name="status" value="{{ status }}" />
+              <input type="hidden" name="page" value="{{ page }}" />
+              <input type="hidden" name="min_score" value="{{ filters.min_score if filters.min_score is not none else '' }}" />
+              <input type="hidden" name="source_type" value="{{ filters.source_type }}" />
+              <input type="hidden" name="email_state" value="{{ filters.email_state }}" />
+              <input type="hidden" name="confidence_band" value="{{ filters.confidence_band }}" />
+              <input type="hidden" name="sort_by" value="{{ filters.sort_by }}" />
+              <input name="reason" placeholder="Why reject" size="16" />
+              <button type="submit">Reject</button>
+            </form>
+            <form method="post" action="/admin/creators/{{ c.id }}/review">
+              <input type="hidden" name="decision" value="pending" />
+              <input type="hidden" name="status" value="{{ status }}" />
+              <input type="hidden" name="page" value="{{ page }}" />
+              <input type="hidden" name="min_score" value="{{ filters.min_score if filters.min_score is not none else '' }}" />
+              <input type="hidden" name="source_type" value="{{ filters.source_type }}" />
+              <input type="hidden" name="email_state" value="{{ filters.email_state }}" />
+              <input type="hidden" name="confidence_band" value="{{ filters.confidence_band }}" />
+              <input type="hidden" name="sort_by" value="{{ filters.sort_by }}" />
+              <button type="submit">Reset</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </form>
+
+  <div class="row" style="justify-content: space-between; margin-top: 10px;">
+    <div class="muted">Page {{ page }}</div>
+    <div class="row">
+      {% if page > 1 %}
+        <a class="pill" href="/admin/creators/review?page={{ page - 1 }}&status={{ status }}{% if filters.min_score is not none %}&min_score={{ filters.min_score }}{% endif %}{% if filters.source_type != 'any' %}&source_type={{ filters.source_type }}{% endif %}{% if filters.email_state != 'any' %}&email_state={{ filters.email_state }}{% endif %}{% if filters.confidence_band != 'any' %}&confidence_band={{ filters.confidence_band }}{% endif %}{% if filters.sort_by != 'newest' %}&sort_by={{ filters.sort_by }}{% endif %}">Prev</a>
+      {% endif %}
+      <div class="muted">
+        Showing {{ (page-1)*page_size + 1 if total else 0 }}–{{ (page-1)*page_size + rows|length }} of {{ total }}
+      </div>
+      {% if total > page * page_size %}
+        <a class="pill" href="/admin/creators/review?page={{ page + 1 }}&status={{ status }}{% if filters.min_score is not none %}&min_score={{ filters.min_score }}{% endif %}{% if filters.source_type != 'any' %}&source_type={{ filters.source_type }}{% endif %}{% if filters.email_state != 'any' %}&email_state={{ filters.email_state }}{% endif %}{% if filters.confidence_band != 'any' %}&confidence_band={{ filters.confidence_band }}{% endif %}{% if filters.sort_by != 'newest' %}&sort_by={{ filters.sort_by }}{% endif %}">Next</a>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

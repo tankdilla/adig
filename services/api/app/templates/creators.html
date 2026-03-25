@@ -30,6 +30,8 @@
       <a href="/admin/graph" class="pill">Graph</a>
       <a href="/admin/patterns" class="pill">Patterns</a>
       <a href="/admin/intel" class="pill">Intel</a>
+      <a href="/admin/creators/review" class="pill">Review Queue</a>
+      <a href="/admin/outreach/inbox" class="pill">Outreach Inbox</a>
       <form method="post" action="/logout">
         <button type="submit">Logout</button>
       </form>
@@ -49,9 +51,15 @@
     <h3>Automation</h3>
     <div class="row">
       <form method="post" action="/admin/creators/discover">
-        <div class="muted">Discover Creators(via hashtags)</div>
-        <input name="limit" value="200" size="6" />
-        <input name="rotate" value="4" size="4" />
+        <div class="muted">Discover creators from YouTube and curated web lists</div>
+        <input name="limit" value="100" size="6" />
+        <input name="max_google_results" value="5" size="4" />
+        <input type="hidden" name="rotate" value="4" />
+        <div style="width:100%;"></div>
+        <textarea name="queries" rows="4" cols="38" style="padding:10px 12px; border-radius:10px; border:1px solid #bbb;">natural skincare influencers
+herbal wellness creators
+christian lifestyle creators
+black wellness creators</textarea>
         <button type="submit">Run Discovery</button>
       </form>
 
@@ -68,7 +76,7 @@
         <button type="submit">Update Graph</button>
       </form>
     </div>
-    <p class="muted">These fire Celery jobs. Check <a href="/admin/logs">Logs</a> for progress.</p>
+    <p class="muted">These fire Celery jobs. Discovery now uses YouTube search plus curated web lists instead of Instagram hashtag scraping. Check <a href="/admin/logs">Logs</a> for progress.</p>
   </div>
 
   <div class="card">
@@ -100,7 +108,7 @@
             {% if c.is_spam %}<span class="pill">spam</span>{% endif %}
           </td>
           <td class="muted">{{ c.niche_tags or "" }}</td>
-          <td class="muted">{{ (c.notes or "")[:240] }}</td>
+          <td class="muted">{{ (c.notes or "")[:180] }}{% set meta = creator_review_meta.get(c.id) %}{% if meta and meta.review_status %}<div style="margin-top:8px;"><span class="pill">review {{ meta.review_status }}</span></div>{% endif %}</td>
           <td>
             <div class="muted">
               <span class="pill">{{ c.outreach_status or "eligible" }}</span>

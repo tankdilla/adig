@@ -5,21 +5,27 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>@{{ creator.handle }} • Creator Profile</title>
   <style>
-    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; max-width: 1100px; margin: 0 auto; }
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; max-width: 1180px; margin: 0 auto; }
     a { color: inherit; }
     .topbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap: wrap; }
     .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; margin: 12px 0; }
     .row { display:flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .stack { display:flex; flex-direction:column; gap: 10px; }
     .pill { display:inline-block; padding:6px 10px; border-radius: 999px; background:#f2f2f2; font-size: 12px; }
     .muted { color:#666; font-size: 14px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; font-size: 13px; }
     button { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; background: white; cursor:pointer; }
-    input, select, textarea { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; width: 100%; }
+    input, select, textarea { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; width: 100%; box-sizing: border-box; }
     textarea { min-height: 90px; }
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: 10px; border-bottom: 1px solid #eee; text-align:left; vertical-align: top; }
     th { font-size: 13px; color:#666; }
     .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    .grid-3 { display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .metric { border:1px solid #eee; border-radius: 12px; padding: 12px; }
+    .metric b { display:block; font-size: 20px; margin-top: 6px; }
+    .actions { display:flex; gap: 8px; flex-wrap: wrap; align-items:center; }
+    @media (max-width: 900px) { .grid, .grid-3 { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -35,6 +41,7 @@
         <a class="pill" href="/admin/creators">← Back</a>
         <a class="pill" href="https://www.instagram.com/{{ creator.handle }}" target="_blank">Open Instagram</a>
         <a class="pill" href="/admin/graph?handle={{ creator.handle }}">View graph</a>
+        <a class="pill" href="/admin/outreach/inbox">Outreach inbox</a>
       </div>
     </div>
     <form method="post" action="/logout">
@@ -42,32 +49,116 @@
     </form>
   </div>
 
-  <div class="grid">
-    <div class="card">
-      <h3>Outreach Fit</h3>
-      <div class="row">
-        <span class="pill">status: {{ creator.outreach_status or "eligible" }}</span>
+  <div class="card">
+    <h3>Creator Snapshot</h3>
+    <div class="grid-3">
+      <div class="metric">
+        <div class="muted">Review status</div>
+        <b>{{ review_meta.review_status }}</b>
+        {% if review_meta.review_reason %}<div class="muted">{{ review_meta.review_reason }}</div>{% endif %}
       </div>
-      {% if creator.outreach_exclude_reason %}
-        <p class="muted">Reason: {{ creator.outreach_exclude_reason }}</p>
-      {% endif %}
-
-      <div class="row" style="align-items: end;">
-        <form method="post" action="/admin/creators/{{ creator.id }}/outreach_status" style="flex:1;">
-          <div class="muted">Set status</div>
-          <select name="status">
-            <option value="eligible">eligible</option>
-            <option value="excluded">excluded (not a fit)</option>
-            <option value="do_not_contact">do_not_contact (DNC)</option>
-          </select>
-          <div style="height:8px;"></div>
-          <input name="reason" placeholder="Reason (optional)" />
-          <div style="height:8px;"></div>
-          <button type="submit">Update</button>
-        </form>
+      <div class="metric">
+        <div class="muted">Best next step</div>
+        <b style="font-size:17px; line-height:1.35;">{{ next_step }}</b>
+      </div>
+      <div class="metric">
+        <div class="muted">Contact paths</div>
+        <b>{{ contact_channels|length }}</b>
+        <div class="muted">Instagram, email, and site signals</div>
       </div>
     </div>
+  </div>
 
+  <div class="grid">
+    <div class="card stack">
+      <div>
+        <h3>Discovery + Contact Signals</h3>
+        <div class="row">
+          <span class="pill">discovery score: {{ review_meta.discovery_score or creator.score }}</span>
+          <span class="pill">confidence: {{ review_meta.confidence if review_meta.confidence is not none else "unknown" }}</span>
+          {% for platform in review_meta.source_platforms %}<span class="pill">{{ platform }}</span>{% endfor %}
+        </div>
+      </div>
+
+      {% if review_meta.reasons %}
+        <div>
+          <div class="muted"><b>Why this creator surfaced</b></div>
+          <div class="row" style="margin-top:6px;">
+            {% for reason in review_meta.reasons %}<span class="pill">{{ reason }}</span>{% endfor %}
+          </div>
+        </div>
+      {% endif %}
+
+      <div>
+        <div class="muted"><b>Contact channels</b></div>
+        {% if contact_channels %}
+          <div class="stack" style="margin-top:8px;">
+            {% for channel in contact_channels %}
+              <div class="row">
+                <span class="pill">{{ channel.label }}</span>
+                <a href="{{ channel.url }}" target="_blank">{{ channel.value }}</a>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="muted">No contact signals stored yet.</p>
+        {% endif %}
+      </div>
+
+      {% if review_meta.source_urls %}
+        <div>
+          <div class="muted"><b>Source links</b></div>
+          <ul>
+            {% for url in review_meta.source_urls %}
+              <li><a href="{{ url }}" target="_blank">{{ url }}</a></li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="card stack">
+      <div>
+        <h3>Outreach Fit</h3>
+        <div class="row">
+          <span class="pill">status: {{ creator.outreach_status or "eligible" }}</span>
+          <span class="pill">drafts: {{ workflow_summary.total }}</span>
+          <span class="pill">sent: {{ workflow_summary.sent }}</span>
+          <span class="pill">booked: {{ workflow_summary.booked }}</span>
+        </div>
+        {% if creator.outreach_exclude_reason %}
+          <p class="muted">Reason: {{ creator.outreach_exclude_reason }}</p>
+        {% endif %}
+      </div>
+
+      <form method="post" action="/admin/creators/{{ creator.id }}/outreach_status" style="flex:1;">
+        <input type="hidden" name="return_to" value="/admin/creators/{{ creator.id }}" />
+        <div class="muted">Set status</div>
+        <select name="status">
+          <option value="eligible" {% if creator.outreach_status == "eligible" %}selected{% endif %}>eligible</option>
+          <option value="excluded" {% if creator.outreach_status == "excluded" %}selected{% endif %}>excluded</option>
+          <option value="do_not_contact" {% if creator.outreach_status == "do_not_contact" %}selected{% endif %}>do_not_contact</option>
+        </select>
+        <div style="height:8px;"></div>
+        <input name="reason" placeholder="Reason (optional)" value="{{ creator.outreach_exclude_reason or '' }}" />
+        <div style="height:8px;"></div>
+        <button type="submit">Update outreach status</button>
+      </form>
+
+      <div>
+        <div class="muted"><b>Workflow summary</b></div>
+        <div class="row" style="margin-top:8px;">
+          <span class="pill">pending {{ workflow_summary.pending }}</span>
+          <span class="pill">approved {{ workflow_summary.approved }}</span>
+          <span class="pill">replied {{ workflow_summary.replied }}</span>
+          <span class="pill">declined {{ workflow_summary.declined }}</span>
+          <span class="pill">ghosted {{ workflow_summary.ghosted }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid">
     <div class="card">
       <h3>Relationship</h3>
       {% if relationship %}
@@ -95,161 +186,312 @@
         <div style="height:8px;"></div>
         <textarea name="notes" placeholder="Notes (optional)"></textarea>
         <div style="height:8px;"></div>
-        <button type="submit">Save</button>
+        <button type="submit">Save relationship</button>
       </form>
     </div>
-  </div>
 
-  <div class="card">
-    <h3>Niche Tags + Notes</h3>
-    <div class="muted">Tags: {{ creator.niche_tags or "" }}</div>
-    <p class="muted">{{ creator.notes or "" }}</p>
+    <div class="card">
+      <h3>Niche Tags + Notes</h3>
+      <div class="muted">Tags: {{ creator.niche_tags or "" }}</div>
+      <p class="muted">{{ creator.notes or "" }}</p>
+    </div>
   </div>
 
   <div class="card">
     <h3>Create Outreach Draft</h3>
 
     <form method="post" action="/admin/creators/{{ creator.id }}/outreach_drafts" style="margin-top:10px;">
-        <div class="grid">
+      <div class="grid">
         <div>
-            <div class="muted">Campaign (optional)</div>
-            <select name="campaign_id">
+          <div class="muted">Campaign (optional)</div>
+          <select name="campaign_id">
             <option value="">—</option>
             {% for camp in campaigns %}
-                <option value="{{ camp.id }}">{{ camp.name }}</option>
+              <option value="{{ camp.id }}">{{ camp.name }}</option>
             {% endfor %}
-            </select>
+          </select>
         </div>
 
         <div>
-            <div class="muted">Send channel</div>
-            <select name="send_channel">
+          <div class="muted">Send channel</div>
+          <select name="send_channel">
             <option value="instagram_dm">instagram_dm</option>
             <option value="email">email</option>
             <option value="comment">comment</option>
-            </select>
+          </select>
         </div>
 
         <div>
-            <div class="muted">Offer type</div>
-            <input name="offer_type" placeholder="e.g., gifted product, paid collab, affiliate" />
+          <div class="muted">Offer type</div>
+          <input name="offer_type" placeholder="e.g., gifted product, paid collab, affiliate" />
         </div>
 
         <div>
-            <div class="muted">Campaign name (optional)</div>
-            <input name="campaign_name" placeholder="e.g., Spring Body Oils Push" />
+          <div class="muted">Campaign name (optional)</div>
+          <input name="campaign_name" placeholder="e.g., Spring Body Oils Push" />
         </div>
+        <div>
+          <div class="muted">Sequence step (optional)</div>
+          <select name="sequence_step">
+            <option value="">—</option>
+            <option value="first_touch">first_touch</option>
+            <option value="follow_up_1">follow_up_1</option>
+            <option value="follow_up_2">follow_up_2</option>
+          </select>
         </div>
+        <div>
+          <div class="muted">Due date (optional)</div>
+          <input type="datetime-local" name="due_at" />
+        </div>
+      </div>
 
-        <div style="height:10px;"></div>
+      <div style="height:10px;"></div>
 
-        <div class="muted">Message</div>
-        <textarea name="message" placeholder="Write a DM here…"></textarea>
+      <div class="muted">Message</div>
+      <textarea name="message" placeholder="Write a DM here…"></textarea>
 
-        <div style="height:10px;"></div>
-        <button type="submit">Create Draft</button>
+      <div style="height:10px;"></div>
+      <button type="submit">Create Draft</button>
     </form>
 
     <div style="height:10px;"></div>
 
     <form method="post" action="/admin/creators/{{ creator.id }}/outreach_drafts/template">
-        <div class="muted">Or generate a quick template (no LLM)</div>
-        <div class="row" style="align-items:end;">
-        <input name="offer_type" placeholder="Offer type (optional)" style="max-width:320px;" />
-        <input name="campaign_name" placeholder="Campaign name (optional)" style="max-width:320px;" />
+      <div class="muted">Or generate a quick template</div>
+      <div class="row" style="align-items:end;">
+        <input name="offer_type" placeholder="Offer type (optional)" style="max-width:260px;" />
+        <input name="campaign_name" placeholder="Campaign name (optional)" style="max-width:240px;" />
+        <select name="send_channel" style="max-width:180px;">
+          <option value="">best available</option>
+          <option value="instagram_dm">instagram_dm</option>
+          <option value="email">email</option>
+        </select>
+        <input type="datetime-local" name="due_at" style="max-width:220px;" />
         <button type="submit">Create Template Draft</button>
-        </div>
+      </div>
     </form>
-    </div>
+  </div>
+
+  <div class="card">
+    <h3>Outreach Sequence Planner</h3>
+    <p class="muted">Plan a three touch sequence with due dates for this creator. Existing sequence steps are preserved and missing ones are created.</p>
+
+    <form method="post" action="/admin/creators/{{ creator.id }}/outreach_sequence" class="stack" style="margin-top:10px;">
+      <div class="grid">
+        <div>
+          <div class="muted">Sequence start</div>
+          <input type="datetime-local" name="start_at" value="{{ default_sequence_start }}" />
+        </div>
+        <div>
+          <div class="muted">Send channel</div>
+          <select name="send_channel">
+            <option value="">best available</option>
+            <option value="instagram_dm">instagram_dm</option>
+            <option value="email">email</option>
+            <option value="comment">comment</option>
+          </select>
+        </div>
+        <div>
+          <div class="muted">Offer type</div>
+          <input name="offer_type" placeholder="e.g., gifted set, paid collab, affiliate" />
+        </div>
+        <div>
+          <div class="muted">Campaign name</div>
+          <input name="campaign_name" placeholder="Optional campaign name" />
+        </div>
+      </div>
+      <div class="actions">
+        <button type="submit">Create Sequence Plan</button>
+      </div>
+    </form>
+
+    <table style="margin-top:12px;">
+      <thead>
+        <tr>
+          <th>Step</th>
+          <th>Due</th>
+          <th>Status</th>
+          <th>Draft</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in sequence_rows %}
+          <tr>
+            <td>
+              <b>{{ row.label }}</b>
+              {% if row.is_due %}<div class="muted">Due now</div>{% endif %}
+            </td>
+            <td>{{ row.due_at or "—" }}</td>
+            <td>
+              <span class="pill">{{ row.status }}</span>
+              {% if row.approval != "not_created" %}<span class="pill">{{ row.approval }}</span>{% endif %}
+            </td>
+            <td>
+              {% if row.draft %}
+                <a href="#draft-{{ row.draft.id }}">Draft #{{ row.draft.id }}</a>
+              {% else %}
+                <span class="muted">Not created yet</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 
   <div class="card">
     <h3>Outreach Drafts (latest)</h3>
     {% if drafts and drafts|length > 0 %}
-        <table>
-        <thead>
-            <tr>
-            <th>Created</th>
-            <th>Campaign</th>
-            <th>Approval</th>
-            <th>Outreach</th>
-            <th>Message</th>
-            <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for d in drafts %}
-            <tr>
-            <td class="muted">{{ d.created_at }}</td>
-            <td class="muted">{{ d.campaign_name or (d.campaign.name if d.campaign else "—") }}</td>
+      <div class="stack">
+        {% for d in drafts %}
+          <div class="card" style="margin:0;" id="draft-{{ d.id }}">
+            <div class="row">
+              <span class="pill">created {{ d.created_at }}</span>
+              <span class="pill">approval {{ d.status }}</span>
+              <span class="pill">workflow {{ d.outreach_status }}</span>
+              <span class="pill">channel {{ d.send_channel }}</span>
+              {% if d.sequence_step %}<span class="pill">{{ d.sequence_step }}</span>{% endif %}
+              {% if d.due_at %}<span class="pill">due {{ d.due_at }}</span>{% endif %}
+              {% if d.followups_sent %}<span class="pill">followups {{ d.followups_sent }}</span>{% endif %}
+            </div>
 
-            <td class="muted">{{ d.status }}</td>
-            <td class="muted">{{ d.outreach_status }}</td>
+            <div class="grid" style="margin-top:10px;">
+              <form method="post" action="/admin/outreach_drafts/{{ d.id }}/update" class="stack">
+                <div>
+                  <div class="muted">Edit message</div>
+                  <textarea name="message">{{ d.message }}</textarea>
+                </div>
+                <div class="grid">
+                  <div>
+                    <div class="muted">Offer type</div>
+                    <input name="offer_type" value="{{ d.offer_type or '' }}" />
+                  </div>
+                  <div>
+                    <div class="muted">Campaign name</div>
+                    <input name="campaign_name" value="{{ d.campaign_name or '' }}" />
+                  </div>
+                  <div>
+                    <div class="muted">Send channel</div>
+                    <select name="send_channel">
+                      <option value="instagram_dm" {% if d.send_channel == "instagram_dm" %}selected{% endif %}>instagram_dm</option>
+                      <option value="email" {% if d.send_channel == "email" %}selected{% endif %}>email</option>
+                      <option value="comment" {% if d.send_channel == "comment" %}selected{% endif %}>comment</option>
+                    </select>
+                  </div>
+                  <div>
+                    <div class="muted">Thread URL</div>
+                    <input name="thread_url" value="{{ d.thread_url or '' }}" placeholder="optional" />
+                  </div>
+                  <div>
+                    <div class="muted">Sequence step</div>
+                    <select name="sequence_step">
+                      <option value="" {% if not d.sequence_step %}selected{% endif %}>—</option>
+                      <option value="first_touch" {% if d.sequence_step == "first_touch" %}selected{% endif %}>first_touch</option>
+                      <option value="follow_up_1" {% if d.sequence_step == "follow_up_1" %}selected{% endif %}>follow_up_1</option>
+                      <option value="follow_up_2" {% if d.sequence_step == "follow_up_2" %}selected{% endif %}>follow_up_2</option>
+                    </select>
+                  </div>
+                  <div>
+                    <div class="muted">Due at</div>
+                    <input type="datetime-local" name="due_at" value="{{ d.due_at.strftime('%Y-%m-%dT%H:%M') if d.due_at else '' }}" />
+                  </div>
+                </div>
+                <button type="submit">Save Draft Edits</button>
+              </form>
 
-            <td>{{ (d.message or "")[:220] }}{% if (d.message or "")|length > 220 %}…{% endif %}</td>
-
-            <td>
-                <div class="row">
-                {% if d.status != "approved" %}
-                <form method="post" action="/admin/outreach_drafts/{{ d.id }}/approve">
-                    <button type="submit">Approve</button>
-                </form>
-                {% else %}
-                <form method="post" action="/admin/outreach_drafts/{{ d.id }}/unapprove">
-                    <button type="submit">Unapprove</button>
-                </form>
-                {% endif %}
-
-                <form method="post" action="/admin/outreach_drafts/{{ d.id }}/mark_sent">
-                    <input name="thread_url" placeholder="thread url (optional)" style="max-width:220px;" />
-                    <button type="submit">Mark sent</button>
-                </form>
+              <div class="stack">
+                <div>
+                  <div class="muted"><b>Quick actions</b></div>
+                  <div class="actions" style="margin-top:8px;">
+                    {% if d.status != "approved" %}
+                      <form method="post" action="/admin/outreach_drafts/{{ d.id }}/approve"><button type="submit">Approve</button></form>
+                    {% else %}
+                      <form method="post" action="/admin/outreach_drafts/{{ d.id }}/unapprove"><button type="submit">Unapprove</button></form>
+                    {% endif %}
+                    <form method="post" action="/admin/outreach_drafts/{{ d.id }}/followup" class="actions">
+                      <select name="tone" style="max-width:160px;">
+                        <option value="gentle">gentle follow up</option>
+                        <option value="warm">warm follow up</option>
+                        <option value="direct">direct follow up</option>
+                      </select>
+                      <button type="submit">Create Follow Up</button>
+                    </form>
+                  </div>
                 </div>
 
-                <div style="height:8px;"></div>
-
-                <form method="post" action="/admin/outreach_drafts/{{ d.id }}/record_reply">
-                <div class="row">
-                    <input name="last_response_text" placeholder="Paste their reply (optional)" style="min-width:320px;" />
-                    <button type="submit">Record reply</button>
-                </div>
+                <form method="post" action="/admin/outreach_drafts/{{ d.id }}/stage" class="stack">
+                  <div class="muted"><b>Workflow stage</b></div>
+                  <select name="stage">
+                    <option value="pending">pending</option>
+                    <option value="approved">approved</option>
+                    <option value="sent">sent</option>
+                    <option value="replied">replied</option>
+                    <option value="booked">booked</option>
+                    <option value="declined">declined</option>
+                    <option value="ghosted">ghosted</option>
+                  </select>
+                  <input name="note" placeholder="Optional note, response text, or thread URL" />
+                  <button type="submit">Update Stage</button>
                 </form>
-            </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-        </table>
+              </div>
+            </div>
+
+            {% if d.last_response_text %}
+              <div class="muted" style="margin-top:10px;"><b>Last response</b></div>
+              <div class="muted">{{ d.last_response_text }}</div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
     {% else %}
-        <p class="muted">No outreach drafts yet.</p>
+      <p class="muted">No outreach drafts yet.</p>
     {% endif %}
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Outreach Timeline</h3>
+      {% if events and events|length > 0 %}
+        <table>
+          <thead>
+            <tr><th>When</th><th>Event</th><th>Note</th></tr>
+          </thead>
+          <tbody>
+            {% for e in events %}
+              <tr>
+                <td class="muted">{{ e.created_at }}</td>
+                <td class="muted">{{ e.event_type }}</td>
+                <td class="muted">{{ e.note or '—' }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="muted">No outreach events recorded yet.</p>
+      {% endif %}
     </div>
 
-  <div class="card">
-    <h3>Graph Neighbors (top edges)</h3>
-    {% if edges and edges|length > 0 %}
-      <table>
-        <thead>
-          <tr>
-            <th>Edge</th>
-            <th>Type</th>
-            <th>Weight</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for e in edges %}
-          <tr>
-            <td class="muted">
-              {{ e.source_creator_id }} → {{ e.target_creator_id }}
-            </td>
-            <td class="muted">{{ e.edge_type }}</td>
-            <td class="muted">{{ e.weight }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      <p class="muted">Tip: open “View graph” for handle-based view.</p>
-    {% else %}
-      <p class="muted">No edges yet. Run “Build graph”.</p>
-    {% endif %}
+    <div class="card">
+      <h3>Graph Neighbors (top edges)</h3>
+      {% if edges and edges|length > 0 %}
+        <table>
+          <thead>
+            <tr><th>Edge</th><th>Type</th><th>Weight</th></tr>
+          </thead>
+          <tbody>
+            {% for e in edges %}
+              <tr>
+                <td class="muted">{{ e.source_creator_id }} → {{ e.target_creator_id }}</td>
+                <td class="muted">{{ e.edge_type }}</td>
+                <td class="muted">{{ e.weight }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="muted">No edges yet. Run “Build graph”.</p>
+      {% endif %}
+    </div>
   </div>
 
   <div class="card">

@@ -515,3 +515,166 @@ This will allow Hello To Natural to build **a powerful creator ecosystem** that 
 Internal project for Hello To Natural.
 
 ---
+
+## Tests and startup smoke check
+
+Run the lightweight unit tests:
+
+```bash
+cd services/api
+pytest tests -q
+```
+
+Run the smoke check against an already running API:
+
+```bash
+cd services/api
+python smoke_check.py --url http://127.0.0.1:8000
+```
+
+Or let the smoke check start the API process for you:
+
+```bash
+cd services/api
+DATABASE_URL=postgresql+psycopg://h2n:h2n_password@db:5432/h2n python smoke_check.py   --url http://127.0.0.1:8000   --startup-command "uvicorn app.main:app --host 127.0.0.1 --port 8000"
+```
+
+
+## Testing
+
+```bash
+cd services/api
+pytest tests -q
+```
+
+This now includes lightweight unit tests, smoke tests, and FastAPI integration tests that run against a temporary SQLite database.
+
+```bash
+cd services/api
+pytest tests/test_integration_app.py -q
+```
+
+```bash
+cd services/api
+python smoke_check.py --url http://127.0.0.1:8000
+```
+
+
+## Run workflow approval integration tests
+
+```
+cd services/api
+pytest tests/test_workflow_approvals.py -q
+```
+
+These tests cover post approval/posting, engagement approval and execution, and outreach draft approval, sending, and response tracking.
+
+
+
+## Phase 1 creator discovery
+
+The creator discovery flow now supports a non Instagram first path:
+- YouTube search ingestion for creator handles and rough audience hints
+- curated web list scraping from search results
+- deterministic scoring based on niche fit, contactability, source diversity, confidence, and audience range
+
+Admin UI:
+- go to `/admin/creators`
+- use the discovery form with newline separated queries
+- default Celery task: `tasks.creator_discovery_phase1`
+
+Docker environment:
+```bash
+CREATOR_DISCOVERY_TASK=tasks.creator_discovery_phase1
+```
+
+Tests:
+```bash
+cd services/api
+pytest tests/test_creator_discovery_phase1.py -q
+```
+
+
+## Creator review queue
+
+Discovery candidates now flow into `/admin/creators/review`, which shows why each creator was discovered, source links, score reasons, contact signals, and quick approve or reject actions before outreach.
+
+Bulk review mode is also available on the same page so you can select multiple creators at once and approve, reject, or reset them together with one shared note.
+
+```bash
+cd services/api
+pytest tests/test_creator_review_queue.py -q
+```
+
+
+## Creator review queue filters
+
+The review queue now supports tighter review controls so you can work through discovered creators faster.
+
+Available controls:
+
+* minimum score
+* source type
+* email present or missing
+* confidence band
+* sort order
+
+These filters are preserved when you:
+
+* paginate
+* approve a creator
+* reject a creator
+* run a bulk review action
+
+Direct test command:
+
+```
+cd services/api
+pytest tests/test_creator_review_queue.py -q
+```
+
+
+## Creator Profile + Outreach Workflow
+
+- Creator detail pages now show discovery signals, contact channels, review context, and a workflow summary.
+- Outreach drafts can now be edited inline from the creator profile.
+- You can generate a follow-up draft directly from an existing sent draft.
+- Draft stage can be advanced from the creator page through pending, approved, sent, replied, booked, declined, and ghosted.
+
+Run the focused tests:
+
+```bash
+cd services/api
+pytest tests/test_creator_profile_outreach.py -q
+```
+
+
+## Creator profile outreach sequence planner
+
+The creator profile now includes an outreach sequence planner that can create a standard three touch sequence:
+- first touch
+- follow up 1
+- follow up 2
+
+Each draft can store a sequence step and due date, and the creator profile shows the planned timeline and current status for each step.
+
+Run the focused tests with:
+
+```bash
+cd services/api
+pytest tests/test_creator_profile_outreach.py -q
+```
+
+
+## Outreach Inbox
+
+A daily action queue is now available at `/admin/outreach/inbox`.
+It groups open outreach sequence steps across creators into due today, overdue, next 7 days, later, and undated buckets.
+You can filter by channel and approval state, then approve or mark drafts sent without leaving the inbox.
+
+Run only the inbox tests:
+
+```bash
+cd services/api
+pytest tests/test_outreach_inbox.py -q
+```

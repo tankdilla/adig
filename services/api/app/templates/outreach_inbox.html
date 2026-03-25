@@ -1,0 +1,150 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Outreach Inbox • H2N</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; max-width: 1180px; margin: 0 auto; }
+    a { color: inherit; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; margin: 12px 0; }
+    .row { display:flex; gap: 10px; flex-wrap: wrap; align-items:center; }
+    .grid { display:grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+    .pill { display:inline-block; padding:6px 10px; border-radius: 999px; background:#f2f2f2; font-size: 12px; text-decoration:none; }
+    .pill.warn { background:#fff4dd; }
+    .pill.bad { background:#fdecec; }
+    .pill.good { background:#e9f8ee; }
+    .muted { color:#666; font-size:14px; }
+    button { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; background: white; cursor:pointer; }
+    input, select { padding: 10px 12px; border-radius: 10px; border: 1px solid #bbb; }
+    .field label { display:block; font-size:12px; color:#666; margin-bottom:6px; }
+    .field input, .field select { width:100%; box-sizing:border-box; }
+    .filters { display:grid; grid-template-columns: repeat(3, minmax(180px, 1fr)) auto; gap:10px; align-items:end; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { padding: 10px; border-bottom:1px solid #eee; text-align:left; vertical-align:top; }
+    th { font-size: 13px; color:#666; }
+    .metric { border: 1px solid #eee; border-radius: 12px; padding: 12px; }
+    .metric b { display:block; font-size:20px; margin-top:6px; }
+    .message-preview { max-width: 360px; white-space: pre-wrap; font-size: 13px; }
+    @media (max-width: 900px) {
+      .grid, .filters { grid-template-columns: 1fr; }
+      table, thead, tbody, th, td, tr { display:block; }
+      thead { display:none; }
+      td { border-bottom:none; padding:6px 0; }
+      tr { border-bottom: 1px solid #eee; padding: 10px 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div>
+      <h2>Outreach Inbox</h2>
+      <div class="muted">Daily action queue for due and overdue outreach sequence steps across creators.</div>
+    </div>
+    <div class="row">
+      <a href="/admin" class="pill">← Admin</a>
+      <a href="/admin/creators" class="pill">Creators</a>
+      <a href="/admin/creators/review" class="pill">Review Queue</a>
+    </div>
+  </div>
+
+  <div class="card grid">
+    <div class="metric"><div class="muted">Actionable</div><b>{{ counts.actionable }}</b><div class="muted">Due today + overdue</div></div>
+    <div class="metric"><div class="muted">Overdue</div><b>{{ counts.overdue }}</b><div class="muted">Past due steps</div></div>
+    <div class="metric"><div class="muted">Due today</div><b>{{ counts.today }}</b><div class="muted">Work today</div></div>
+    <div class="metric"><div class="muted">Next 7 days</div><b>{{ counts.next_7_days }}</b><div class="muted">Upcoming sequence steps</div></div>
+    <div class="metric"><div class="muted">Undated</div><b>{{ counts.undated }}</b><div class="muted">Needs scheduling</div></div>
+  </div>
+
+  <div class="card row" style="align-items:center;">
+    <span class="muted">View:</span>
+    {% set non_bucket_qs = [] %}
+    <a class="pill {% if filters.bucket == 'actionable' %}warn{% endif %}" href="/admin/outreach/inbox?channel={{ filters.channel }}&approval_state={{ filters.approval_state }}&bucket=actionable">Actionable</a>
+    <a class="pill {% if filters.bucket == 'overdue' %}bad{% endif %}" href="/admin/outreach/inbox?channel={{ filters.channel }}&approval_state={{ filters.approval_state }}&bucket=overdue">Overdue</a>
+    <a class="pill {% if filters.bucket == 'today' %}warn{% endif %}" href="/admin/outreach/inbox?channel={{ filters.channel }}&approval_state={{ filters.approval_state }}&bucket=today">Today</a>
+    <a class="pill {% if filters.bucket == 'next_7_days' %}good{% endif %}" href="/admin/outreach/inbox?channel={{ filters.channel }}&approval_state={{ filters.approval_state }}&bucket=next_7_days">Next 7 days</a>
+    <a class="pill {% if filters.bucket == 'undated' %}warn{% endif %}" href="/admin/outreach/inbox?channel={{ filters.channel }}&approval_state={{ filters.approval_state }}&bucket=undated">Undated</a>
+    <a class="pill {% if filters.bucket == 'all' %}good{% endif %}" href="/admin/outreach/inbox?channel={{ filters.channel }}&approval_state={{ filters.approval_state }}&bucket=all">All open</a>
+  </div>
+
+  <form method="get" action="/admin/outreach/inbox" class="card filters">
+    <input type="hidden" name="bucket" value="{{ filters.bucket }}" />
+    <div class="field">
+      <label for="channel">Channel</label>
+      <select id="channel" name="channel">
+        <option value="any" {% if filters.channel == 'any' %}selected{% endif %}>Any channel</option>
+        <option value="email" {% if filters.channel == 'email' %}selected{% endif %}>Email</option>
+        <option value="instagram_dm" {% if filters.channel == 'instagram_dm' %}selected{% endif %}>Instagram DM</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="approval_state">Approval state</label>
+      <select id="approval_state" name="approval_state">
+        <option value="any" {% if filters.approval_state == 'any' %}selected{% endif %}>Any</option>
+        <option value="pending" {% if filters.approval_state == 'pending' %}selected{% endif %}>Needs approval</option>
+        <option value="approved" {% if filters.approval_state == 'approved' %}selected{% endif %}>Ready to send</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>&nbsp;</label>
+      <div class="row">
+        <button type="submit">Apply filters</button>
+        <a class="pill" href="/admin/outreach/inbox?bucket={{ filters.bucket }}">Clear</a>
+      </div>
+    </div>
+  </form>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr><th>Creator</th><th>Step</th><th>Due</th><th>Status</th><th>Preview</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          {% set draft = row.draft %}
+          {% set creator = row.creator %}
+          <tr>
+            <td>
+              <div><b><a href="/admin/creators/{{ creator.id }}">@{{ creator.handle }}</a></b></div>
+              <div class="muted">{{ row.channel_label }}{% if row.primary_email %} • {{ row.primary_email }}{% endif %}</div>
+              <div class="row" style="margin-top:6px;">
+                <span class="pill">review {{ row.review_status }}</span>
+                <span class="pill">score {{ row.discovery_score or creator.score or 0 }}</span>
+              </div>
+            </td>
+            <td><div><b>{{ row.step_label }}</b></div>{% if draft.campaign_name %}<div class="muted">{{ draft.campaign_name }}</div>{% endif %}</td>
+            <td>
+              {% if draft.due_at %}<div><b>{{ draft.due_at.strftime('%Y-%m-%d %H:%M') }}</b></div>{% else %}<div><b>Unscheduled</b></div>{% endif %}
+              <div class="row" style="margin-top:6px;"><span class="pill {% if row.bucket == 'overdue' %}bad{% elif row.bucket in ['today','undated'] %}warn{% else %}good{% endif %}">{{ row.bucket.replace('_', ' ') }}</span><span class="pill">{{ row.next_action }}</span></div>
+            </td>
+            <td><span class="pill {% if row.approval_value == 'approved' %}good{% else %}warn{% endif %}">{{ row.approval_value }}</span><div class="muted" style="margin-top:6px;">workflow {{ draft.outreach_status.value if draft.outreach_status else 'pending' }}</div></td>
+            <td><div class="message-preview">{{ (draft.message or '')[:280] }}{% if (draft.message or '')|length > 280 %}…{% endif %}</div></td>
+            <td>
+              <div class="row">
+                <a class="pill" href="/admin/creators/{{ creator.id }}">Open profile</a>
+                {% set return_to = '/admin/outreach/inbox?bucket=' ~ filters.bucket ~ '&channel=' ~ filters.channel ~ '&approval_state=' ~ filters.approval_state ~ '&page=' ~ page %}
+                {% if row.approval_value != 'approved' %}
+                  <form method="post" action="/admin/outreach_drafts/{{ draft.id }}/approve"><input type="hidden" name="return_to" value="{{ return_to }}" /><button type="submit">Approve</button></form>
+                {% else %}
+                  <form method="post" action="/admin/outreach_drafts/{{ draft.id }}/unapprove"><input type="hidden" name="return_to" value="{{ return_to }}" /><button type="submit">Unapprove</button></form>
+                {% endif %}
+                <form method="post" action="/admin/outreach_drafts/{{ draft.id }}/mark_sent"><input type="hidden" name="return_to" value="{{ return_to }}" /><input name="thread_url" placeholder="Thread link optional" /><button type="submit">Mark sent</button></form>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="row" style="justify-content: space-between; margin-top: 10px;">
+    <div class="muted">Page {{ page }}</div>
+    <div class="row">
+      {% if page > 1 %}<a class="pill" href="/admin/outreach/inbox?bucket={{ filters.bucket }}&channel={{ filters.channel }}&approval_state={{ filters.approval_state }}&page={{ page - 1 }}">Prev</a>{% endif %}
+      <div class="muted">Showing {{ (page-1)*page_size + 1 if total else 0 }}–{{ (page-1)*page_size + rows|length }} of {{ total }}</div>
+      {% if total > page * page_size %}<a class="pill" href="/admin/outreach/inbox?bucket={{ filters.bucket }}&channel={{ filters.channel }}&approval_state={{ filters.approval_state }}&page={{ page + 1 }}">Next</a>{% endif %}
+    </div>
+  </div>
+</body>
+</html>
